@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -612,21 +612,48 @@ function FlowGraphInner({
   const [nodes, setNodes, onNodesChange] = useNodesState(graphNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(graphEdges)
 
+  // Track theme changes to update node borders
+  const [isDarkMode, setIsDarkMode] = useState(() => 
+    document.documentElement.classList.contains('dark')
+  )
+
+  useEffect(() => {
+    // Watch for theme changes
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'))
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+
+    return () => observer.disconnect()
+  }, [])
+
   // Highlight selected node
   const selectedNodes = useMemo(() => {
+    // Use a bright blue that works in both light and dark modes
+    // In light mode: bright blue (#3B82F6) stands out
+    // In dark mode: slightly lighter blue (#60A5FA) for better visibility
+    const selectedBorderColor = isDarkMode ? '#60A5FA' : '#3B82F6'
+    const selectedShadowColor = isDarkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.3)'
+    
     return nodes.map((node) => ({
       ...node,
       style: {
         ...node.style,
         border:
           node.id === selectedNodeId
-            ? `3px solid #0F172A`
+            ? `3px solid ${selectedBorderColor}`
             : (node.style as any)?.border,
         boxShadow:
-          node.id === selectedNodeId ? '0 0 0 4px rgba(15, 23, 42, 0.3)' : 'none',
+          node.id === selectedNodeId 
+            ? `0 0 0 4px ${selectedShadowColor}` 
+            : (node.style as any)?.boxShadow || '0 1px 3px rgba(0, 0, 0, 0.08)',
       },
     }))
-  }, [nodes, selectedNodeId])
+  }, [nodes, selectedNodeId, isDarkMode])
 
   const onNodeClick = useCallback(
     (_: unknown, node: Node) => {

@@ -9,17 +9,17 @@ import './styles/globals.css'
 const MetricsDashboard = lazy(() => import('./pages/MetricsDashboard'))
 
 function App() {
-  const [isDarkMode, setIsDarkMode] = useState(false)
-
-  useEffect(() => {
-    // Check for saved preference or system preference
+  // Initialize from localStorage synchronously to prevent flash
+  const getInitialDarkMode = () => {
     const savedMode = localStorage.getItem('darkMode')
     if (savedMode !== null) {
-      setIsDarkMode(JSON.parse(savedMode))
-    } else {
-      setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
+      return JSON.parse(savedMode)
     }
-  }, [])
+    // Default to system preference if no saved preference
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+
+  const [isDarkMode, setIsDarkMode] = useState(getInitialDarkMode)
 
   useEffect(() => {
     // Update DOM and localStorage

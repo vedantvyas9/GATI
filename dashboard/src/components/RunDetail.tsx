@@ -2,7 +2,6 @@ import { useState, useEffect, Suspense, lazy } from 'react'
 import { Run, ExecutionTraceResponseData, ExecutionTreeNodeResponse } from '../types'
 import { apiClient } from '../services/api'
 import ExecutionTree from './ExecutionTree'
-import EventDetailPanel from './EventDetailPanel'
 import ErrorBoundary from './ErrorBoundary'
 
 // Lazy load FlowGraph since it requires ReactFlow
@@ -18,7 +17,6 @@ export default function RunDetail({ run }: RunDetailProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<ExecutionTreeNodeResponse | null>(null)
   const [showGraph, setShowGraph] = useState(true)
-  const [isPanelOpen, setIsPanelOpen] = useState(false)
 
   useEffect(() => {
     const fetchTimeline = async () => {
@@ -40,7 +38,6 @@ export default function RunDetail({ run }: RunDetailProps) {
 
   const handleEventSelect = (event: ExecutionTreeNodeResponse) => {
     setSelectedEvent(event)
-    setIsPanelOpen(true)
   }
 
   const durationSeconds = (run?.total_duration_ms || 0) / 1000
@@ -132,16 +129,16 @@ export default function RunDetail({ run }: RunDetailProps) {
             {showGraph ? (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                Graph View
+                Close Graph View
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                Tree Only
+                Open Graph View
               </>
             )}
           </button>
@@ -195,16 +192,6 @@ export default function RunDetail({ run }: RunDetailProps) {
           </p>
         )}
       </div>
-
-      {/* Event Detail Panel */}
-      <EventDetailPanel
-        event={selectedEvent}
-        onClose={() => {
-          setIsPanelOpen(false)
-          setSelectedEvent(null)
-        }}
-        isOpen={isPanelOpen}
-      />
     </div>
   )
 }
