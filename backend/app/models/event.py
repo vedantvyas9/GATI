@@ -29,6 +29,9 @@ class Event(BaseModel):
     parent_event_id = Column(String(36), nullable=True, index=True)
     """Parent event ID for hierarchical event relationships."""
 
+    previous_event_id = Column(String(36), nullable=True, index=True)
+    """Previous event ID for sequential execution flow tracking."""
+
     data = Column(JSON, nullable=False)
     """Event data as JSON object containing event-specific information."""
 

@@ -5,10 +5,10 @@ export interface Agent {
   description?: string
   created_at: string
   updated_at?: string
-  total_runs?: number
-  total_events?: number
-  total_cost?: number
-  avg_cost?: number
+  total_runs: number
+  total_events: number
+  total_cost: number
+  avg_cost: number
 }
 
 export interface Run {
@@ -79,8 +79,61 @@ export interface ExecutionTrace {
   total_duration_ms: number
 }
 
+export interface GraphEdge {
+  from: string
+  to: string
+  type: 'regular' | 'conditional'
+  condition?: string | null
+  condition_func?: string | null
+  async?: boolean
+  module?: string | null
+  file?: string | null
+}
+
+export interface NodeMetadata {
+  node_name: string
+  node_type: string
+  function_name?: string | null
+  class_name?: string | null
+  module?: string | null
+  file?: string | null
+  input_channels?: string[]
+  output_channels?: string[]
+  is_nested_graph?: boolean
+  nested_structure?: GraphStructure | null
+}
+
+export interface GraphStructure {
+  nodes: string[]
+  nodes_metadata?: Record<string, NodeMetadata>
+  edges: GraphEdge[]
+  entry_point?: string | null
+  end_nodes: string[]
+  has_conditional_edges: boolean
+  total_nodes?: number
+  total_edges?: number
+  conditional_edge_count?: number
+}
+
+export interface LatencyGap {
+  from: string
+  to: string
+  gap_ms: number
+}
+
+export interface ExecutionFlow {
+  total_nodes_executed: number
+  execution_order: string[]
+  parallel_groups: string[][]
+  sequential_pairs: string[][]
+  latency_gaps?: LatencyGap[]
+  concurrency_ratio?: number
+  node_overlap_groups?: string[][]
+}
+
 export interface ExecutionTreeNodeResponse extends Event {
   parent_event_id?: string
+  previous_event_id?: string  // NEW: Sequential flow tracking
   latency_ms?: number
   cost?: number
   tokens_in?: number
@@ -96,6 +149,8 @@ export interface ExecutionTraceResponseData {
   total_tokens_in: number
   total_tokens_out: number
   execution_tree: ExecutionTreeNodeResponse[]
+  graph_structure?: GraphStructure  // NEW: Graph topology
+  execution_flow?: ExecutionFlow    // NEW: Execution analysis
 }
 
 export interface CostTimestampData {

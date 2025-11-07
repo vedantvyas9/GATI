@@ -145,6 +145,7 @@ class ExecutionTreeNodeResponse(BaseModel):
     timestamp: str
     data: Dict[str, Any]
     parent_event_id: Optional[str] = None
+    previous_event_id: Optional[str] = None  # Sequential flow: previous event in execution order
     latency_ms: Optional[float] = None
     cost: Optional[float] = None
     tokens_in: Optional[float] = None
@@ -187,6 +188,8 @@ class ExecutionTraceResponse(BaseModel):
     total_tokens_in: float
     total_tokens_out: float
     execution_tree: List[ExecutionTreeNodeResponse] = Field(default_factory=list)
+    graph_structure: Optional[Dict[str, Any]] = None  # Graph topology (nodes, edges)
+    execution_flow: Optional[Dict[str, Any]] = None  # Execution flow analysis (parallel/sequential)
 
     class Config:
         json_schema_extra = {

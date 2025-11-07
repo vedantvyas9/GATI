@@ -205,8 +205,5 @@ if __name__ == "__main__":
     # Example 3: Task for which there is no specific data
     run_travel_planner("Can you give me a travel overview for Buenos Aires next week?")
 
-    # Flush all events to backend
-    print("\n[Flushing events to backend...]")
-    observe.flush()
-    time.sleep(3)  # Give time for events to reach backend
-    print("[Done]")
+    # Events are automatically flushed to the backend in the background
+    print("\n[Events sent to backend automatically]")

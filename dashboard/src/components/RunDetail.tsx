@@ -46,6 +46,23 @@ export default function RunDetail({ run }: RunDetailProps) {
   const durationSeconds = (run?.total_duration_ms || 0) / 1000
   const durationMinutes = (durationSeconds / 60).toFixed(2)
 
+  // Calculate event count from execution tree
+  const countTreeEvents = (nodes: ExecutionTreeNodeResponse[]): number => {
+    let count = 0
+    const traverse = (nodeList: ExecutionTreeNodeResponse[]) => {
+      for (const node of nodeList) {
+        count++
+        if (node.children && node.children.length > 0) {
+          traverse(node.children)
+        }
+      }
+    }
+    traverse(nodes)
+    return count
+  }
+
+  const eventCount = timeline ? countTreeEvents(timeline.execution_tree) : (run?.event_count || 0)
+
   if (!run) {
     return (
       <div className="card text-center py-12">
@@ -59,22 +76,9 @@ export default function RunDetail({ run }: RunDetailProps) {
       {/* Run Header - Compact */}
       <div className="card py-3 px-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-serif font-bold text-navy-900 dark:text-white">
-              Run Details
-            </h2>
-            <div
-              className={`px-2 py-0.5 rounded text-xs font-medium badge ${
-                run.status === 'completed'
-                  ? 'badge-success'
-                  : run.status === 'failed'
-                  ? 'badge-error'
-                  : 'badge-info'
-              }`}
-            >
-              {run.status.charAt(0).toUpperCase() + run.status.slice(1)}
-            </div>
-          </div>
+          <h2 className="text-lg font-serif font-bold text-navy-900 dark:text-white">
+            Run Details
+          </h2>
           <p className="text-sm text-navy-600 dark:text-navy-400 font-semibold">
             {run.run_name}
           </p>
@@ -99,13 +103,13 @@ export default function RunDetail({ run }: RunDetailProps) {
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-600 dark:text-gray-400">Events:</span>
             <span className="text-sm font-semibold text-navy-600 dark:text-navy-400">
-              {run.event_count || 0}
+              {eventCount}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-600 dark:text-gray-400">Tokens:</span>
             <span className="text-sm font-semibold text-navy-600 dark:text-navy-400">
-              {(((run.tokens_in || 0) + (run.tokens_out || 0)) / 1000).toFixed(1)}K
+              {Math.round((run.tokens_in || 0) + (run.tokens_out || 0)).toLocaleString()}
             </span>
           </div>
         </div>
@@ -175,6 +179,8 @@ export default function RunDetail({ run }: RunDetailProps) {
                   <ErrorBoundary>
                     <FlowGraph
                       nodes={timeline.execution_tree}
+                      graphStructure={timeline.graph_structure}
+                      executionFlow={timeline.execution_flow}
                       onNodeSelect={handleEventSelect}
                       selectedNodeId={selectedEvent?.event_id}
                     />

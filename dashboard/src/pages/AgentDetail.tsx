@@ -4,12 +4,11 @@ import { Agent, Run } from '../types'
 import { apiClient } from '../services/api'
 import AgentOverview from '../components/AgentOverview'
 import AgentRuns from '../components/AgentRuns'
-import AgentMetrics from '../components/AgentMetrics'
 import ConfirmationModal from '../components/ConfirmationModal'
 import RealtimeIndicator from '../components/RealtimeIndicator'
 import { usePolling } from '../hooks/usePolling'
 
-type TabType = 'overview' | 'runs' | 'metrics'
+type TabType = 'overview' | 'runs'
 
 export default function AgentDetail() {
   const { agentName } = useParams<{ agentName: string }>()
@@ -126,7 +125,6 @@ export default function AgentDetail() {
   const tabs: { id: TabType; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'runs', label: 'Runs' },
-    { id: 'metrics', label: 'Metrics' },
   ]
 
   return (
@@ -191,7 +189,6 @@ export default function AgentDetail() {
       <div>
         {activeTab === 'overview' && <AgentOverview agent={agent} />}
         {activeTab === 'runs' && <AgentRuns runs={runs} onDeleteRun={handleDeleteRun} />}
-        {activeTab === 'metrics' && <AgentMetrics agent={agent} />}
       </div>
 
       <ConfirmationModal

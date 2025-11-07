@@ -44,6 +44,7 @@ class Event:
     agent_name: str = ""
     event_id: str = field(default="")
     parent_event_id: Optional[str] = field(default=None)
+    previous_event_id: Optional[str] = field(default=None)  # Sequential flow: points to the event that happened immediately before this one
     data: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):

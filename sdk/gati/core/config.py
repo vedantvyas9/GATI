@@ -31,8 +31,10 @@ class Config:
         self.backend_url: str = os.getenv("GATI_BACKEND_URL", "http://localhost:8000")
         
         # Optional settings with defaults
-        self.batch_size: int = int(os.getenv("GATI_BATCH_SIZE", "100"))
-        self.flush_interval: float = float(os.getenv("GATI_FLUSH_INTERVAL", "5.0"))
+        # Lower batch size (10 instead of 100) for faster event delivery
+        self.batch_size: int = int(os.getenv("GATI_BATCH_SIZE", "10"))
+        # Lower flush interval (1s instead of 5s) for more responsive batching
+        self.flush_interval: float = float(os.getenv("GATI_FLUSH_INTERVAL", "1.0"))
         self.telemetry: bool = os.getenv("GATI_TELEMETRY", "true").lower() in ("true", "1", "yes")
         
         # Validate configuration

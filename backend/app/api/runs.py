@@ -171,9 +171,10 @@ async def get_execution_trace(
         events_result = await session.execute(events_stmt)
         events = events_result.scalars().all()
 
-        # Build tree structure
+        # Build tree structure using both parent_event_id (hierarchy) and previous_event_id (sequence)
         event_map: Dict[str, ExecutionTreeNodeResponse] = {}
         root_nodes: List[ExecutionTreeNodeResponse] = []
+        node_to_previous: Dict[str, str] = {}  # Map event_id -> previous_event_id
 
         # First pass: create all nodes
         for event in events:
@@ -183,22 +184,128 @@ async def get_execution_trace(
                 timestamp=event.timestamp.isoformat(),
                 data=event.data,
                 parent_event_id=event.parent_event_id,
+                previous_event_id=event.previous_event_id,
                 latency_ms=event.data.get("latency_ms"),
                 cost=event.data.get("cost"),
                 tokens_in=event.data.get("tokens_in"),
                 tokens_out=event.data.get("tokens_out"),
             )
             event_map[event.event_id] = node
+            if event.previous_event_id:
+                node_to_previous[event.event_id] = event.previous_event_id
 
-        # Second pass: build hierarchy
+        # Second pass: build parent-child hierarchy
+        # Special case: agent_end should NEVER be a child, always a root node
+        root_node_ids = set()  # Track which nodes are already in root_nodes to avoid duplicates
+        
         for event in events:
             node = event_map[event.event_id]
-            if event.parent_event_id and event.parent_event_id in event_map:
-                # Add to parent's children
-                event_map[event.parent_event_id].children.append(node)
+            # Agent End should always be a root node, never a child
+            if event.event_type == 'agent_end':
+                # Ensure agent_end is not in any parent's children list
+                # Remove it from any parent's children if it was added earlier
+                if event.parent_event_id and event.parent_event_id in event_map:
+                    parent_node = event_map[event.parent_event_id]
+                    # Remove from parent's children if present
+                    parent_node.children = [child for child in parent_node.children if child.event_id != node.event_id]
+                # Add to root_nodes only if not already added
+                if node.event_id not in root_node_ids:
+                    root_nodes.append(node)
+                    root_node_ids.add(node.event_id)
+            elif event.parent_event_id and event.parent_event_id in event_map:
+                # Add to parent's children (but not if parent is agent_end)
+                parent_node = event_map[event.parent_event_id]
+                # Don't add children to agent_end - it should be a leaf node
+                # Also don't add agent_end as a child
+                if parent_node.event_type != 'agent_end' and node.event_type != 'agent_end':
+                    parent_node.children.append(node)
             else:
-                # Root node
-                root_nodes.append(node)
+                # Root node (no parent)
+                if node.event_id not in root_node_ids:
+                    root_nodes.append(node)
+                    root_node_ids.add(node.event_id)
+
+        # Third pass: restructure sequential flow using previous_event_id
+        # Remove nodes from root_nodes if they have a previous_event_id pointing to another root
+        # and append them as sequential siblings
+        sequential_roots: List[ExecutionTreeNodeResponse] = []
+        processed_ids = set()
+        
+        # Find agent_start first
+        agent_start_node = None
+        agent_end_node = None
+        other_roots: List[ExecutionTreeNodeResponse] = []
+        
+        for root in root_nodes:
+            if root.event_type == 'agent_start':
+                agent_start_node = root
+            elif root.event_type == 'agent_end':
+                agent_end_node = root
+            else:
+                other_roots.append(root)
+        
+        # Build sequential chain starting from agent_start
+        if agent_start_node:
+            sequential_roots.append(agent_start_node)
+            processed_ids.add(agent_start_node.event_id)
+            
+            # Follow the chain of previous_event_id
+            current_id = agent_start_node.event_id
+            while True:
+                # Find next node in sequence (node whose previous_event_id == current_id)
+                next_node = None
+                for root in other_roots:
+                    if root.previous_event_id == current_id and root.event_id not in processed_ids:
+                        next_node = root
+                        break
+                
+                if next_node:
+                    sequential_roots.append(next_node)
+                    processed_ids.add(next_node.event_id)
+                    current_id = next_node.event_id
+                else:
+                    break
+        
+        # Add remaining roots that weren't part of the sequential chain
+        for root in other_roots:
+            if root.event_id not in processed_ids:
+                sequential_roots.append(root)
+        
+        # Always ensure agent_end is at the end
+        # If agent_end is already in sequential_roots, remove it and add it at the end
+        # If agent_end is not in sequential_roots, add it at the end
+        if agent_end_node:
+            # Remove agent_end from sequential_roots if it's already there
+            sequential_roots = [root for root in sequential_roots if root.event_id != agent_end_node.event_id]
+            # Add agent_end at the end
+            sequential_roots.append(agent_end_node)
+        
+        root_nodes = sequential_roots
+
+        # Extract graph_structure from agent_start event and execution_flow from agent_end event
+        graph_structure = None
+        execution_flow = None
+
+        for event in events:
+            if event.event_type == "agent_start":
+                # Check both in metadata and directly in data
+                metadata = event.data.get("metadata", {})
+                if metadata and isinstance(metadata, dict):
+                    graph_structure = metadata.get("graph_structure")
+                # Also check directly in event.data (new location)
+                if not graph_structure:
+                    graph_structure = event.data.get("graph_structure")
+            elif event.event_type == "agent_end":
+                # Check both in metadata and directly in data
+                execution_flow = event.data.get("execution_flow")
+                # Also check in metadata for backward compatibility
+                if not execution_flow:
+                    metadata = event.data.get("metadata", {})
+                    if metadata and isinstance(metadata, dict):
+                        execution_flow = metadata.get("execution_flow")
+                # Also extract graph_structure from agent_end for correlation
+                if not graph_structure:
+                    graph_structure = event.data.get("graph_structure")
 
         return ExecutionTraceResponse(
             run_name=run.run_name,
@@ -208,6 +315,8 @@ async def get_execution_trace(
             total_tokens_in=run.tokens_in,
             total_tokens_out=run.tokens_out,
             execution_tree=root_nodes,
+            graph_structure=graph_structure,
+            execution_flow=execution_flow,
         )
 
     except HTTPException:

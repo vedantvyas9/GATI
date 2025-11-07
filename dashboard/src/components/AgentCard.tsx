@@ -12,7 +12,7 @@ interface AgentCardProps {
 export default function AgentCard({ agent, onDelete }: AgentCardProps) {
   const totalRuns = agent.total_runs || 0
   const totalCost = agent.total_cost || 0
-  const tokensUsed = (agent.total_events || 0) * 100 // Rough estimate
+  const totalEvents = agent.total_events || 0
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -69,13 +69,13 @@ export default function AgentCard({ agent, onDelete }: AgentCardProps) {
               <div>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Cost</p>
                 <p className="text-lg font-bold text-navy-600 dark:text-navy-400">
-                  ${totalCost.toFixed(2)}
+                  ${totalCost.toFixed(4)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Tokens</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Events</p>
                 <p className="text-lg font-bold text-navy-600 dark:text-navy-400">
-                  {(tokensUsed / 1000).toFixed(0)}K
+                  {totalEvents}
                 </p>
               </div>
             </div>

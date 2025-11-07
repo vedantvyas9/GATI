@@ -317,6 +317,14 @@ function TreeNode({
                 </span>
               )}
 
+              {/* Cost display */}
+              {node.cost !== undefined && node.cost !== null && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+                  <span>💰</span>
+                  ${node.cost.toFixed(4)}
+                </span>
+              )}
+
               {/* Expand/collapse button - 4px padding */}
               {hasChildren && (
                 <button

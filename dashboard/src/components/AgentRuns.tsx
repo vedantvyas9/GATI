@@ -75,27 +75,16 @@ export default function AgentRuns({ runs, onDeleteRun }: AgentRunsProps) {
                         onClick={() => setSelectedRun(run)}
                         className="flex-1 text-left"
                       >
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="mb-1">
                           <span className="text-sm font-semibold text-navy-900 dark:text-navy-100">
                             {run.run_name}
-                          </span>
-                          <span
-                            className={`text-xs px-2 py-1 rounded badge ${
-                              run.status === 'completed'
-                                ? 'badge-success'
-                                : run.status === 'failed'
-                                ? 'badge-error'
-                                : 'badge-info'
-                            }`}
-                          >
-                            {run.status}
                           </span>
                         </div>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
                           {new Date(run.created_at).toLocaleString()}
                         </p>
                         <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          Cost: ${(run.total_cost || 0).toFixed(2)}
+                          Cost: ${(run.total_cost || 0).toFixed(4)}
                         </p>
                       </button>
                       <button

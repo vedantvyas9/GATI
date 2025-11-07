@@ -15,15 +15,27 @@ logger = logging.getLogger(__name__)
 
 # Prices are in USD per 1,000,000 tokens (1M)
 MODEL_PRICING: Dict[str, Dict[str, float]] = {
-    # OpenAI
+    # OpenAI - GPT-4
     "gpt-4": {"input": 30.0, "output": 60.0},
+    "gpt-4-32k": {"input": 60.0, "output": 120.0},
     "gpt-4-turbo": {"input": 10.0, "output": 30.0},
+
+    # OpenAI - GPT-4o
+    "gpt-4o": {"input": 2.5, "output": 10.0},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.6},
+
+    # OpenAI - GPT-3.5 Turbo
     "gpt-3.5-turbo": {"input": 0.5, "output": 1.5},
 
-    # Anthropic
+    # Anthropic Claude 3
     "claude-3-opus": {"input": 15.0, "output": 75.0},
     "claude-3-sonnet": {"input": 3.0, "output": 15.0},
     "claude-3-haiku": {"input": 0.25, "output": 1.25},
+
+    # Google Gemini
+    "gemini-2-5-flash-lite": {"input": 0.1, "output": 0.4},
+    "gemini-2-5-pro": {"input": 1.25, "output": 10.0},
+    "gemini-pro": {"input": 0.5, "output": 1.5},
 
     # Add more models as needed
 }
@@ -42,11 +54,21 @@ def normalize_model_name(model: str) -> str:
 
     name = model.strip().lower()
 
-    # OpenAI families
+    # OpenAI GPT-4 families
     if name.startswith("gpt-4-turbo") or "gpt-4-turbo" in name:
         return "gpt-4-turbo"
-    if name.startswith("gpt-4-32k") or name.startswith("gpt-4-") or name == "gpt-4":
+    if name.startswith("gpt-4-32k") or "32k" in name:
+        return "gpt-4-32k"
+    if name.startswith("gpt-4") and "gpt-4o" not in name:  # Match gpt-4 but not gpt-4o
         return "gpt-4"
+
+    # OpenAI GPT-4o families
+    if "gpt-4o-mini" in name:
+        return "gpt-4o-mini"
+    if "gpt-4o" in name:
+        return "gpt-4o"
+
+    # OpenAI GPT-3.5 Turbo
     if name.startswith("gpt-3.5-turbo"):
         return "gpt-3.5-turbo"
 
@@ -57,6 +79,15 @@ def normalize_model_name(model: str) -> str:
         return "claude-3-sonnet"
     if "claude-3-haiku" in name:
         return "claude-3-haiku"
+
+    # Google Gemini families
+    if "gemini" in name:
+        if "2-5-pro" in name or "2.5-pro" in name:
+            return "gemini-2-5-pro"
+        if "2-5-flash-lite" in name or "2.5-flash-lite" in name:
+            return "gemini-2-5-flash-lite"
+        if "pro" in name:
+            return "gemini-pro"
 
     # If there is a version-like suffix, try removing trailing tokens that look like
     # dates or preview markers (e.g., -0613, -1106-preview, -0125)
@@ -78,8 +109,8 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
         output_tokens: Number of completion/output tokens
 
     Returns:
-        Estimated cost in USD, rounded to 4 decimal places. Returns 0.0 if the
-        model is not recognized.
+        Estimated cost in USD, rounded to 6 decimal places (0.000001 = 1 millionth of a dollar).
+        Returns 0.0 if the model is not recognized.
     """
 
     try:
@@ -98,7 +129,7 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     cost_in = (input_tokens_int / 1_000_000.0) * float(pricing.get("input", 0.0))
     cost_out = (output_tokens_int / 1_000_000.0) * float(pricing.get("output", 0.0))
     total = cost_in + cost_out
-    return round(total, 4)
+    return round(total, 6)
 
 
 __all__ = [
@@ -106,6 +137,7 @@ __all__ = [
     "normalize_model_name",
     "calculate_cost",
 ]
+
 
 
 

@@ -162,8 +162,9 @@ class Observe:
                 except Exception as e:
                     logging.getLogger("gati").debug(f"Failed to instrument Tools: {e}")
 
-        # Register automatic flush on program exit
-        atexit.register(self.flush)
+        # Register automatic shutdown on program exit
+        # Use shutdown instead of flush to ensure thread is properly stopped
+        atexit.register(self.shutdown)
 
         self._initialized = True
     
@@ -237,29 +238,37 @@ class Observe:
     
     def track_event(self, event: Event) -> None:
         """Manually track an event.
-        
+
         Args:
             event: Event object to track
         """
         if not self._initialized:
             raise RuntimeError("Observe not initialized. Call init() first.")
-        
+
         if self._buffer is None:
             raise RuntimeError("Event buffer not initialized.")
-        
+
         # Set run_name from context if not already set
         from gati.core.context import get_current_run_name
         current_run_name = get_current_run_name()
 
         if not event.run_name and current_run_name:
             event.run_name = current_run_name
-        
+
         # Set agent_name from config if not already set
         if not event.agent_name and self._config:
             event.agent_name = self._config.agent_name
-        
+
         # Add event to buffer
-        self._buffer.add_event(event)
+        try:
+            self._buffer.add_event(event)
+            # Debug logging
+            logger = logging.getLogger("gati")
+            logger.debug(f"Event tracked: {event.event_type} (buffer size: {len(self._buffer)})")
+        except Exception as e:
+            logger = logging.getLogger("gati")
+            logger.error(f"Failed to track event: {e}", exc_info=True)
+            raise
     
     def flush(self) -> None:
         """Force flush buffered events to the backend.
@@ -277,21 +286,32 @@ class Observe:
     
     def shutdown(self) -> None:
         """Clean shutdown of the SDK.
-        
+
         Stops the background buffer thread, flushes remaining events, and
         closes the HTTP client session.
         """
         if not self._initialized:
             return
-        
-        # Stop buffer (this will also flush remaining events)
-        if self._buffer:
-            self._buffer.stop(timeout=5.0)
-        
-        # Close client session
-        if self._client:
-            self._client.close()
-        
+
+        try:
+            # Stop buffer (this will also flush remaining events)
+            if self._buffer:
+                # Wait up to 10 seconds for thread to stop and all events to flush
+                self._buffer.stop(timeout=10.0)
+
+                # Ensure any stragglers are flushed
+                if len(self._buffer) > 0:
+                    self._buffer.flush()
+        except Exception as e:
+            logging.getLogger("gati").debug(f"Error stopping buffer: {e}")
+
+        try:
+            # Close client session
+            if self._client:
+                self._client.close()
+        except Exception as e:
+            logging.getLogger("gati").debug(f"Error closing client: {e}")
+
         # Reset state
         self._buffer = None
         self._client = None

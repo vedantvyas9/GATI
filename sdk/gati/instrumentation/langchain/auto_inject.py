@@ -112,7 +112,6 @@ from gati.core.event import (
 )
 from gati.core.context import get_current_run_id, get_parent_event_id, run_context, arun_context, set_parent_event_id
 from gati.utils.token_counter import extract_tokens_from_response
-from gati.utils.cost_calculator import calculate_cost
 from gati.utils.serializer import serialize
 
 logger = logging.getLogger("gati")

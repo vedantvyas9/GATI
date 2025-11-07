@@ -117,6 +117,9 @@ async def ingest_events(
 
             logger.info(f"Successfully ingested {len(events_to_insert)} events")
 
+            # Aggregate metrics for affected runs
+            await _aggregate_run_metrics(session, runs_dict, events_to_insert)
+
         return {
             "status": "success",
             "message": f"Ingested {len(events_to_insert)} events",
@@ -251,3 +254,106 @@ async def _ensure_runs_exist(
         logger.error(f"Error ensuring runs exist: {str(e)}", exc_info=True)
         await session.rollback()
         raise
+
+
+async def _aggregate_run_metrics(
+    session: AsyncSession,
+    runs_dict: dict[tuple[str, str], tuple[str, str]],
+    events_to_insert: list[dict],
+) -> None:
+    """Aggregate metrics from events and update Run model.
+
+    For each run that received new events, calculate:
+    - total_cost: sum of all event costs
+    - tokens_in: sum of all event tokens_in
+    - tokens_out: sum of all event tokens_out
+    - total_duration_ms: max timestamp - min timestamp (or sum of latencies)
+
+    Args:
+        session: Database session
+        runs_dict: Mapping of (agent_name, run_id) -> (agent_name, run_name)
+        events_to_insert: List of event dictionaries that were inserted
+    """
+    if not runs_dict:
+        return
+
+    try:
+        # Get unique run_ids from the inserted events
+        run_ids_with_events = set()
+        for event_dict in events_to_insert:
+            run_ids_with_events.add(event_dict["run_id"])
+
+        # For each affected run, aggregate metrics
+        for run_id in run_ids_with_events:
+            # Get all events for this run
+            events_stmt = select(Event).where(Event.run_id == run_id)
+            events_result = await session.execute(events_stmt)
+            events = events_result.scalars().all()
+
+            if not events:
+                continue
+
+            # Aggregate metrics
+            total_cost = 0.0
+            total_tokens_in = 0.0
+            total_tokens_out = 0.0
+            min_timestamp = None
+            max_timestamp = None
+
+            for event in events:
+                # Extract metrics from event.data
+                event_data = event.data or {}
+
+                # Cost
+                if "cost" in event_data and event_data["cost"] is not None:
+                    try:
+                        total_cost += float(event_data["cost"])
+                    except (TypeError, ValueError):
+                        pass
+
+                # Tokens
+                if "tokens_in" in event_data and event_data["tokens_in"] is not None:
+                    try:
+                        total_tokens_in += float(event_data["tokens_in"])
+                    except (TypeError, ValueError):
+                        pass
+
+                if "tokens_out" in event_data and event_data["tokens_out"] is not None:
+                    try:
+                        total_tokens_out += float(event_data["tokens_out"])
+                    except (TypeError, ValueError):
+                        pass
+
+                # Track timestamps for duration calculation
+                if event.timestamp:
+                    if min_timestamp is None or event.timestamp < min_timestamp:
+                        min_timestamp = event.timestamp
+                    if max_timestamp is None or event.timestamp > max_timestamp:
+                        max_timestamp = event.timestamp
+
+            # Calculate total duration in milliseconds
+            total_duration_ms = None
+            if min_timestamp and max_timestamp:
+                duration = max_timestamp - min_timestamp
+                total_duration_ms = duration.total_seconds() * 1000
+
+            # Update the Run model
+            run_stmt = select(Run).where(Run.run_id == run_id)
+            run_result = await session.execute(run_stmt)
+            run = run_result.scalar_one_or_none()
+
+            if run:
+                run.total_cost = total_cost
+                run.tokens_in = total_tokens_in
+                run.tokens_out = total_tokens_out
+                if total_duration_ms is not None:
+                    run.total_duration_ms = total_duration_ms
+                session.add(run)
+
+        await session.commit()
+        logger.info(f"Aggregated metrics for {len(run_ids_with_events)} runs")
+
+    except Exception as e:
+        logger.error(f"Error aggregating run metrics: {str(e)}", exc_info=True)
+        await session.rollback()
+        # Don't raise - metrics aggregation failure shouldn't block event ingestion

@@ -15,28 +15,61 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/agents", response_model=List[AgentResponse])
+@router.get("/agents", response_model=List[AgentStatsResponse])
 async def list_agents(
     session: AsyncSession = Depends(get_async_session),
-) -> List[AgentResponse]:
+) -> List[AgentStatsResponse]:
     """
-    List all agents.
+    List all agents with statistics.
 
-    Returns a list of all registered agents.
+    Returns a list of all registered agents including their metrics
+    (runs, events, cost, average cost).
     """
     try:
         stmt = select(Agent).order_by(Agent.created_at.desc())
         result = await session.execute(stmt)
         agents = result.scalars().all()
 
-        return [
-            AgentResponse(
-                name=agent.name,
-                description=agent.description,
-                created_at=agent.created_at.isoformat(),
+        agent_stats = []
+        for agent in agents:
+            # Get run statistics
+            runs_stmt = select(
+                func.count(Run.run_name).label("total_runs"),
+                func.coalesce(func.sum(Run.total_cost), 0).label("total_cost"),
+                func.coalesce(func.sum(Run.tokens_in), 0).label("total_tokens_in"),
+                func.coalesce(func.sum(Run.tokens_out), 0).label("total_tokens_out"),
+            ).where(Run.agent_name == agent.name)
+
+            runs_result = await session.execute(runs_stmt)
+            runs_row = runs_result.one()
+            total_runs = runs_row.total_runs or 0
+            total_cost = float(runs_row.total_cost or 0)
+            total_tokens_in = float(runs_row.total_tokens_in or 0)
+            total_tokens_out = float(runs_row.total_tokens_out or 0)
+
+            # Get event count
+            events_stmt = select(func.count(Event.event_id)).where(
+                Event.agent_name == agent.name
             )
-            for agent in agents
-        ]
+            events_result = await session.execute(events_stmt)
+            total_events = events_result.scalar() or 0
+
+            # Calculate average cost
+            avg_cost = total_cost / total_runs if total_runs > 0 else 0.0
+
+            agent_stats.append(
+                AgentStatsResponse(
+                    name=agent.name,
+                    description=agent.description,
+                    total_runs=total_runs,
+                    total_events=total_events,
+                    total_cost=total_cost,
+                    avg_cost=avg_cost,
+                    created_at=agent.created_at.isoformat(),
+                )
+            )
+
+        return agent_stats
     except Exception as e:
         logger.error(f"Error listing agents: {str(e)}", exc_info=True)
         raise HTTPException(

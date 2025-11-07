@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -11,10 +11,129 @@ import ReactFlow, {
   MarkerType,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { ExecutionTreeNodeResponse } from '../types'
+import { ExecutionTreeNodeResponse, GraphStructure, ExecutionFlow } from '../types'
+
+// Legend component
+function Legend() {
+  const [position, setPosition] = useState({ x: 20, y: 20 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(true)
+    setDragOffset({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    })
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      setPosition({
+        x: e.clientX - dragOffset.x,
+        y: e.clientY - dragOffset.y,
+      })
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  return (
+    <div
+      className="absolute bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-4 z-50 select-none"
+      style={{
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        cursor: isDragging ? 'grabbing' : 'grab',
+      }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
+      <div
+        onMouseDown={handleMouseDown}
+        className="font-semibold text-gray-900 dark:text-white mb-3 pb-2 border-b border-gray-300 dark:border-gray-700"
+      >
+        Edge Types
+      </div>
+      <div className="space-y-3">
+        {/* Graph Structure Edge */}
+        <div className="flex items-center gap-3">
+          <svg width="40" height="12" className="flex-shrink-0">
+            <line
+              x1="0"
+              y1="6"
+              x2="32"
+              y2="6"
+              stroke="#3B82F6"
+              strokeWidth="2.2"
+            />
+            <polygon points="32,6 27,4 27,8" fill="#3B82F6" />
+          </svg>
+          <span className="text-sm text-gray-700 dark:text-gray-300">Graph Edge</span>
+        </div>
+
+        {/* Conditional Edge */}
+        <div className="flex items-center gap-3">
+          <svg width="40" height="12" className="flex-shrink-0">
+            <line
+              x1="0"
+              y1="6"
+              x2="32"
+              y2="6"
+              stroke="#F59E0B"
+              strokeWidth="2.5"
+              strokeDasharray="5,5"
+            />
+            <polygon points="32,6 27,4 27,8" fill="#F59E0B" />
+          </svg>
+          <span className="text-sm text-gray-700 dark:text-gray-300">Conditional</span>
+        </div>
+
+        {/* Hierarchical Edge */}
+        <div className="flex items-center gap-3">
+          <svg width="40" height="12" className="flex-shrink-0">
+            <line
+              x1="0"
+              y1="6"
+              x2="32"
+              y2="6"
+              stroke="#A0A0A0"
+              strokeWidth="1.2"
+              strokeDasharray="4,4"
+              opacity="0.6"
+            />
+            <polygon points="32,6 27,4 27,8" fill="#A0A0A0" opacity="0.6" />
+          </svg>
+          <span className="text-sm text-gray-700 dark:text-gray-300">Hierarchical</span>
+        </div>
+
+        {/* Sequential Edge */}
+        <div className="flex items-center gap-3">
+          <svg width="40" height="12" className="flex-shrink-0">
+            <line
+              x1="0"
+              y1="6"
+              x2="32"
+              y2="6"
+              stroke="#16A34A"
+              strokeWidth="2"
+            />
+            <polygon points="32,6 27,4 27,8" fill="#16A34A" />
+          </svg>
+          <span className="text-sm text-gray-700 dark:text-gray-300">Sequential</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface FlowGraphProps {
   nodes: ExecutionTreeNodeResponse[]
+  graphStructure?: GraphStructure | null
+  executionFlow?: ExecutionFlow | null
   onNodeSelect?: (node: ExecutionTreeNodeResponse) => void
   selectedNodeId?: string
 }
@@ -48,6 +167,10 @@ const EVENT_TYPE_COLORS: Record<string, { bg: string; border: string }> = {
   error: {
     bg: '#FEE2E2',
     border: '#DC2626',
+  },
+  node_execution: {
+    bg: '#E0E7FF',
+    border: '#6366F1',
   },
 }
 
@@ -147,11 +270,123 @@ function getNodeDisplayName(node: ExecutionTreeNodeResponse): string {
 }
 
 function buildGraphFromTree(
-  treeNodes: ExecutionTreeNodeResponse[]
+  treeNodes: ExecutionTreeNodeResponse[],
+  executionFlow?: ExecutionFlow | null,
+  graphStructure?: GraphStructure | null
 ): { nodes: Node[]; edges: Edge[]; nodeMap: Map<string, ExecutionTreeNodeResponse> } {
   const nodes: Node[] = []
   const edges: Edge[] = []
   const nodeMap = new Map<string, ExecutionTreeNodeResponse>()
+
+  // Helper function to get node name for sequence matching
+  function getNodeNameForSequence(node: ExecutionTreeNodeResponse): string {
+    const data = node.data as any
+    if (node.event_type === 'node_execution' && data?.node_name) {
+      return String(data.node_name)
+    }
+    if (node.event_type === 'tool_call' && data?.tool_name) {
+      return String(data.tool_name)
+    }
+    return getNodeDisplayName(node)
+  }
+
+  // Create sequence map from execution_flow.execution_order
+  const sequenceMap = new Map<string, number>()
+  let maxSequenceIndex = -1
+  
+  if (executionFlow?.execution_order) {
+    executionFlow.execution_order.forEach((nodeName, index) => {
+      sequenceMap.set(nodeName, index)
+      maxSequenceIndex = Math.max(maxSequenceIndex, index)
+    })
+  }
+  
+  // Build sequence map from previous_event_id chain as fallback
+  const previousEventMap = new Map<string, string>() // event_id -> previous_event_id
+  const eventToNameMap = new Map<string, string>() // event_id -> node_name
+  function collectNodeInfo(node: ExecutionTreeNodeResponse) {
+    if (node.previous_event_id) {
+      previousEventMap.set(node.event_id, node.previous_event_id)
+    }
+    const nodeName = getNodeNameForSequence(node)
+    eventToNameMap.set(node.event_id, nodeName)
+    if (node.children) {
+      node.children.forEach(collectNodeInfo)
+    }
+  }
+  treeNodes.forEach(collectNodeInfo)
+  
+  // Build sequence index from previous_event_id chain if execution_flow is not available
+  if (maxSequenceIndex === -1 && previousEventMap.size > 0) {
+    // Find root nodes (nodes without previous_event_id or whose previous_event_id is not in the tree)
+    const rootNodeIds = new Set<string>()
+    treeNodes.forEach(node => {
+      const isRoot = !node.previous_event_id || !previousEventMap.has(node.previous_event_id)
+      if (isRoot) {
+        rootNodeIds.add(node.event_id)
+      }
+    })
+    
+    // Build sequence from root nodes following previous_event_id chain
+    let sequenceIndex = 0
+    for (const rootId of rootNodeIds) {
+      let currentId = rootId
+      while (currentId) {
+        const nodeName = eventToNameMap.get(currentId)
+        if (nodeName && !sequenceMap.has(nodeName)) {
+          sequenceMap.set(nodeName, sequenceIndex)
+          maxSequenceIndex = Math.max(maxSequenceIndex, sequenceIndex)
+          sequenceIndex++
+        }
+        // Find next node in chain
+        let nextId: string | undefined
+        for (const [eventId, prevId] of previousEventMap.entries()) {
+          if (prevId === currentId) {
+            nextId = eventId
+            break
+          }
+        }
+        currentId = nextId || ''
+      }
+    }
+  }
+
+  // Helper function to get Y position based on sequence
+  function getNodeYPosition(
+    node: ExecutionTreeNodeResponse,
+    eventType: string,
+    sequenceMap: Map<string, number>,
+    maxSequenceIndex: number
+  ): number {
+    // Dynamic vertical spacing based on graph size
+    // For small graphs (< 5 nodes): 120px spacing
+    // For medium graphs (5-20 nodes): 100px spacing
+    // For large graphs (> 20 nodes): 80px spacing
+    let VERTICAL_SPACING = 120
+    if (maxSequenceIndex > 20) {
+      VERTICAL_SPACING = 80
+    } else if (maxSequenceIndex > 5) {
+      VERTICAL_SPACING = 100
+    }
+
+    if (eventType === 'agent_start') {
+      return 0  // Start at the top
+    }
+    if (eventType === 'agent_end') {
+      return (maxSequenceIndex + 1) * VERTICAL_SPACING  // Proportional spacing
+    }
+
+    // Try to find sequence index by node name
+    const nodeName = getNodeNameForSequence(node)
+    const sequenceIndex = sequenceMap.get(nodeName) ?? -1
+
+    if (sequenceIndex >= 0) {
+      return sequenceIndex * VERTICAL_SPACING
+    }
+
+    // Fallback: use timestamp-based ordering for root nodes
+    return VERTICAL_SPACING
+  }
 
   function processNode(
     node: ExecutionTreeNodeResponse,
@@ -170,7 +405,7 @@ function buildGraphFromTree(
       data: {
         label: (
           <div className="text-xs font-mono max-w-xs">
-            <div className="font-bold mb-1">{displayLabel as unknown as React.ReactNode}</div>
+            <div className="font-bold mb-1 text-gray-900">{displayLabel as unknown as React.ReactNode}</div>
             <div className="text-gray-600">
               {node.latency_ms !== undefined && node.latency_ms !== null
                 ? `${(node.latency_ms / 1000).toFixed(2)}s`
@@ -187,35 +422,40 @@ function buildGraphFromTree(
       position: { x: xPos, y: yPos },
       style: {
         background: colors.bg,
-        border: `2px solid ${colors.border}`,
+        border: `1px solid ${colors.border}`,
         borderRadius: '8px',
-        padding: '8px',
-        minWidth: '120px',
-        minHeight: '60px',
+        padding: '12px 14px',
+        minWidth: '140px',
+        minHeight: '75px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+        fontFamily: 'inherit',
       },
     })
 
     nodeMap.set(node.event_id, node)
 
-    // Create edge from parent
+    // Create hierarchical edge from parent (gray, dashed)
     if (parentId) {
       edges.push({
-        id: `${parentId}-${node.event_id}`,
+        id: `hier-${parentId}-${node.event_id}`,
         source: parentId,
         target: node.event_id,
-        animated: true,
         style: {
-          stroke: '#999',
-          strokeWidth: 2,
+          stroke: '#A0A0A0',
+          strokeWidth: 1.2,
+          strokeDasharray: '4,4',
+          opacity: 0.6,
         },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#999' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#A0A0A0' },
       })
     }
 
-    // Process children - vertical layout with proper spacing
+    // Process children - horizontal layout with dynamic spacing
     if (node.children && node.children.length > 0) {
       const numChildren = node.children.length
-      const childSpacing = 200
+      // Dynamic horizontal spacing based on number of children
+      // Fewer children = wider spacing, more children = tighter spacing
+      const childSpacing = numChildren > 5 ? 150 : 200
       const totalWidth = (numChildren - 1) * childSpacing
       const startX = xPos - totalWidth / 2
 
@@ -229,36 +469,144 @@ function buildGraphFromTree(
     return depth
   }
 
-  // Improved layout: Process tree structure while enforcing agent_start at top, agent_end at bottom
-  // First pass: process all nodes to understand structure
+  // Process root nodes with sequence-based positioning
   treeNodes.forEach((node, index) => {
-    let yPos = 0
-
-    // Determine Y position based on node type
-    if (node.event_type === 'agent_start') {
-      yPos = 0  // Top
-    } else if (node.event_type === 'agent_end') {
-      yPos = 400  // Bottom
-    } else {
-      // Middle - but check if it's a child of agent_start
-      yPos = 200
-    }
-
-    const xPos = index * 250
+    const yPos = getNodeYPosition(node, node.event_type || 'unknown', sequenceMap, maxSequenceIndex)
+    const xPos = index * 300
     processNode(node, xPos, yPos, null, 0)
   })
+
+  // Create sequential edges from previous_event_id (green, animated) after all nodes are processed
+  // This ensures we can check if the previous event exists in the graph
+  const allTreeNodes: ExecutionTreeNodeResponse[] = []
+  function collectAllNodes(node: ExecutionTreeNodeResponse) {
+    allTreeNodes.push(node)
+    if (node.children) {
+      node.children.forEach(collectAllNodes)
+    }
+  }
+  treeNodes.forEach(collectAllNodes)
+
+  allTreeNodes.forEach((node) => {
+    if (node.previous_event_id && nodeMap.has(node.previous_event_id)) {
+      edges.push({
+        id: `seq-${node.previous_event_id}-${node.event_id}`,
+        source: node.previous_event_id,
+        target: node.event_id,
+        animated: true,
+        style: {
+          stroke: '#16A34A',
+          strokeWidth: 2,
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#16A34A' },
+      })
+    }
+  })
+
+  // Add edges from graph_structure if available
+  // This creates the actual LangGraph topology edges
+  if (graphStructure && graphStructure.edges) {
+    // Create a map of node names to event IDs
+    const nodeNameToEventId = new Map<string, string>()
+    allTreeNodes.forEach((node) => {
+      const data = node.data as any
+
+      // For agent_start and agent_end, use special handling
+      if (node.event_type === 'agent_start') {
+        nodeNameToEventId.set('__start__', node.event_id)
+        if (graphStructure.entry_point) {
+          nodeNameToEventId.set(graphStructure.entry_point, node.event_id)
+        }
+      } else if (node.event_type === 'agent_end') {
+        nodeNameToEventId.set('__end__', node.event_id)
+        nodeNameToEventId.set('END', node.event_id)
+      } else if (node.event_type === 'node_execution') {
+        // For node_execution events, use the actual node_name from data
+        const nodeName = data?.node_name
+        if (nodeName) {
+          nodeNameToEventId.set(nodeName, node.event_id)
+        }
+        // Also map the display name as fallback
+        const displayName = getNodeNameForSequence(node)
+        if (displayName && displayName !== nodeName) {
+          nodeNameToEventId.set(displayName, node.event_id)
+        }
+      } else {
+        // For other event types (llm_call, tool_call, etc.), use display name
+        const displayName = getNodeNameForSequence(node)
+        if (displayName) {
+          nodeNameToEventId.set(displayName, node.event_id)
+        }
+      }
+    })
+
+    // Debug: Log the mapping
+    console.log('Node name to event ID mapping:', Object.fromEntries(nodeNameToEventId))
+    console.log('Graph structure edges:', graphStructure.edges)
+
+    // Create edges from graph structure
+    graphStructure.edges.forEach((edge, index) => {
+      const sourceEventId = nodeNameToEventId.get(edge.from)
+      const targetEventId = nodeNameToEventId.get(edge.to)
+
+      // If target is __end__ or END, use the agent_end node
+      const finalTargetId = targetEventId ||
+        (edge.to === '__end__' || edge.to === 'END' ? nodeNameToEventId.get('__end__') : null)
+
+      // Debug: Log edge processing
+      if (!sourceEventId) {
+        console.warn(`Could not find source event ID for node: ${edge.from}`)
+      }
+      if (!finalTargetId && edge.to !== '__end__' && edge.to !== 'END') {
+        console.warn(`Could not find target event ID for node: ${edge.to}`)
+      }
+
+      if (sourceEventId && finalTargetId) {
+        const edgeId = `graph-${edge.from}-${edge.to}-${index}`
+
+        // Don't duplicate edges that already exist from previous_event_id
+        const isDuplicate = edges.some(
+          (e) => e.source === sourceEventId && e.target === finalTargetId
+        )
+
+        if (!isDuplicate) {
+          const isConditional = edge.type === 'conditional'
+          edges.push({
+            id: edgeId,
+            source: sourceEventId,
+            target: finalTargetId,
+            label: isConditional ? edge.condition_func || 'conditional' : undefined,
+            animated: isConditional,
+            style: {
+              stroke: isConditional ? '#F59E0B' : '#3B82F6',
+              strokeWidth: isConditional ? 2.5 : 2.2,
+              strokeDasharray: isConditional ? '5,5' : undefined,
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: isConditional ? '#F59E0B' : '#3B82F6',
+              width: 30,
+              height: 30,
+            },
+          })
+        }
+      }
+    })
+  }
 
   return { nodes, edges, nodeMap }
 }
 
 function FlowGraphInner({
   nodes: treeNodes,
+  graphStructure,
+  executionFlow,
   onNodeSelect,
   selectedNodeId,
 }: FlowGraphProps) {
   const { nodes: graphNodes, edges: graphEdges, nodeMap } = useMemo(
-    () => buildGraphFromTree(treeNodes),
-    [treeNodes]
+    () => buildGraphFromTree(treeNodes, executionFlow, graphStructure),
+    [treeNodes, executionFlow, graphStructure]
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(graphNodes)
@@ -301,7 +649,7 @@ function FlowGraphInner({
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
       <ReactFlow
         nodes={selectedNodes}
         edges={edges}
@@ -309,11 +657,13 @@ function FlowGraphInner({
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         fitView
+        defaultEdgeOptions={{ type: 'straight' }}
       >
         <Background color="#aaa" gap={16} />
         <Controls />
         <MiniMap />
       </ReactFlow>
+      <Legend />
     </div>
   )
 }
