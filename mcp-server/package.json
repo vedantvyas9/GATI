@@ -1,0 +1,41 @@
+{
+  "name": "@gati/mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for querying GATI traces from Claude Desktop and GitHub Copilot",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "bin": {
+    "gati-mcp-server": "./dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "gati",
+    "traces",
+    "observability",
+    "llm",
+    "claude",
+    "copilot"
+  ],
+  "author": "GATI SDK",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "pg": "^8.11.3",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -22,7 +22,7 @@ class Observe:
         from langchain_openai import ChatOpenAI
 
         # Initialize - that's it! All LLM/agent calls are auto-tracked
-        observe.init(backend_url="http://localhost:8000", agent_name="my_agent")
+        observe.init(name="my_agent", backend_url="http://localhost:8000")
 
         # Use LLMs normally - no callbacks parameter needed
         llm = ChatOpenAI(model="gpt-3.5-turbo")
@@ -36,13 +36,13 @@ class Observe:
         result = executor.invoke({"input": "Use the tools..."})  # ← Auto-tracked!
 
     How it works:
-        - observe.init(auto_inject=True) enables automatic callback injection
+        - observe.init(name="...", auto_inject=True) enables automatic callback injection
         - All LangChain Runnables (LLMs, agents, chains) automatically get GATI callbacks
         - Zero code changes to your LangChain usage
         - Works with any LangChain component
 
     Manual mode (if auto-injection disabled):
-        observe.init(backend_url="...", auto_inject=False)
+        observe.init(name="my_agent", backend_url="...", auto_inject=False)
         llm = ChatOpenAI(callbacks=observe.get_callbacks())
     """
     
@@ -70,27 +70,41 @@ class Observe:
         self._instrumented_frameworks: Dict[str, bool] = {}
         self._instrumentation_status: Dict[str, Any] = {}
         self._initialized = False
-        
+        self._global_run_id: Optional[str] = None
+        self._global_run_name: Optional[str] = None
+        self._agent_name: Optional[str] = None
+        self._run_context: Optional[Any] = None
+
         Observe._initialized = True
     
     def init(
         self,
+        name: str,
         backend_url: Optional[str] = None,
-        agent_name: Optional[str] = None,
         auto_inject: bool = True,
         **config: Any
     ) -> None:
         """Initialize the SDK with configuration.
 
         Args:
+            name: Name of the agent/application (REQUIRED)
             backend_url: Backend server URL
-            agent_name: Name of the agent
             auto_inject: Automatically inject GATI callbacks into LangChain Runnables
                         (default: True). When enabled, LLMs and agents automatically
                         track their execution without requiring callbacks parameter.
             **config: Additional configuration options (api_key, environment,
                      batch_size, flush_interval, telemetry, etc.)
+
+        Raises:
+            ValueError: If name is not provided or is empty
         """
+        # Validate required parameter
+        if not name or not isinstance(name, str) or not name.strip():
+            raise ValueError(
+                "The 'name' parameter is required and must be a non-empty string. "
+                "Usage: observe.init(name='my_agent', backend_url='http://localhost:8000')"
+            )
+
         # Get or create config instance
         self._config = Config()
 
@@ -98,8 +112,9 @@ class Observe:
         update_kwargs: Dict[str, Any] = {}
         if backend_url is not None:
             update_kwargs['backend_url'] = backend_url
-        if agent_name is not None:
-            update_kwargs['agent_name'] = agent_name
+
+        # Set agent_name from the required name parameter
+        update_kwargs['agent_name'] = name.strip()
 
         # Add any additional config options
         update_kwargs.update(config)
@@ -126,6 +141,26 @@ class Observe:
 
         # Start buffer background thread
         self._buffer.start()
+
+        # Create a global run context for custom decorators
+        # This allows @track_tool to work without @track_agent
+        from gati.core.event import generate_run_id, generate_run_name
+        from gati.core.context import RunContextManager
+
+        self._global_run_id = generate_run_id(agent_name=name.strip())
+        self._global_run_name = generate_run_name(agent_name=name.strip())
+
+        # Store in instance for access by decorators
+        self._agent_name = name.strip()
+
+        # Initialize the run context that will persist for the lifetime of the script
+        self._run_context = RunContextManager.run_context(
+            run_id=self._global_run_id,
+            run_name=self._global_run_name,
+            agent_name=name.strip()
+        )
+        # Enter the context
+        self._run_context.__enter__()
 
         # Enable automatic callback injection for LangChain if requested
         if auto_inject:
@@ -264,7 +299,12 @@ class Observe:
             self._buffer.add_event(event)
             # Debug logging
             logger = logging.getLogger("gati")
-            logger.debug(f"Event tracked: {event.event_type} (buffer size: {len(self._buffer)})")
+            event_desc = f"{event.event_type}"
+            if hasattr(event, 'data') and isinstance(event.data, dict):
+                node_name = event.data.get('node_name')
+                if node_name:
+                    event_desc += f" ({node_name})"
+            logger.debug(f"Event tracked: {event_desc} [event_id={event.event_id[:8]}...] (buffer size: {len(self._buffer)})")
         except Exception as e:
             logger = logging.getLogger("gati")
             logger.error(f"Failed to track event: {e}", exc_info=True)
@@ -272,17 +312,24 @@ class Observe:
     
     def flush(self) -> None:
         """Force flush buffered events to the backend.
-        
-        Immediately sends all buffered events to the backend without waiting
-        for the batch size or flush interval.
+
+        Immediately sends all buffered events to the backend and waits for
+        all pending send operations to complete. This ensures that all events
+        are delivered before the function returns.
         """
         if not self._initialized:
             raise RuntimeError("Observe not initialized. Call init() first.")
-        
+
         if self._buffer is None:
             raise RuntimeError("Event buffer not initialized.")
-        
+
+        # Flush the buffer (triggers send)
         self._buffer.flush()
+
+        # Wait for all background send threads to complete
+        # Use a reasonable timeout to avoid hanging indefinitely
+        if self._client:
+            self._client.wait_for_pending_sends(timeout=30.0)
     
     def shutdown(self) -> None:
         """Clean shutdown of the SDK.
@@ -302,6 +349,10 @@ class Observe:
                 # Ensure any stragglers are flushed
                 if len(self._buffer) > 0:
                     self._buffer.flush()
+
+            # Wait for all pending sends to complete
+            if self._client:
+                self._client.wait_for_pending_sends(timeout=10.0)
         except Exception as e:
             logging.getLogger("gati").debug(f"Error stopping buffer: {e}")
 

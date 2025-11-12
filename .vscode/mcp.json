@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "gati": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "gati_mcp_server",
+        "node",
+        "dist/index.js"
+      ]
+    }
+  }
+}

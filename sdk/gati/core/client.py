@@ -25,7 +25,7 @@ class EventClient:
         max_retries: int = 3,
     ):
         """Initialize event client.
-        
+
         Args:
             backend_url: Backend server URL (default from config)
             api_key: API key for authentication (default from config)
@@ -36,23 +36,27 @@ class EventClient:
         self.api_key = api_key or config.api_key
         self.timeout = timeout
         self.max_retries = max_retries
-        
+
         # Build the events endpoint URL
         self.events_url = urljoin(self.backend_url.rstrip("/") + "/", "api/events")
-        
+
         # Session for connection pooling
         self._session = requests.Session()
-        
+
         # Set default headers
         self._session.headers.update({
             "Content-Type": "application/json",
         })
-        
+
         # Add API key to headers if provided
         if self.api_key:
             self._session.headers.update({
                 "Authorization": f"Bearer {self.api_key}",
             })
+
+        # Track active send threads for proper cleanup
+        self._active_threads: List[threading.Thread] = []
+        self._threads_lock = threading.Lock()
     
     def _prepare_events(self, events: List[Event]) -> List[Dict[str, Any]]:
         """Convert events to dictionaries for JSON serialization.
@@ -129,30 +133,38 @@ class EventClient:
     
     def send_events(self, events: List[Event]) -> None:
         """Send events to the backend asynchronously.
-        
+
         This method sends events in a background thread to avoid blocking
         the user's code. Errors are logged but don't raise exceptions.
-        
+
         Args:
             events: List of Event objects to send
         """
         if not events:
             return
-        
+
         # Convert events to dictionaries
         events_dict = self._prepare_events(events)
-        
+
+        # Clean up finished threads before starting a new one
+        self._cleanup_finished_threads()
+
         # Send in background thread to avoid blocking
         thread = threading.Thread(
             target=self._send_events_sync,
             args=(events_dict,),
             daemon=True,
         )
+
+        # Track the thread so we can wait for it during flush
+        with self._threads_lock:
+            self._active_threads.append(thread)
+
         thread.start()
     
     def _send_events_sync(self, events: List[Dict[str, Any]]) -> None:
         """Synchronous send method (called from background thread).
-        
+
         Args:
             events: List of event dictionaries to send
         """
@@ -161,7 +173,33 @@ class EventClient:
         except Exception as e:
             # Catch any unexpected errors - don't crash user's code
             print(f"Error sending events: {e}")
-    
+
+    def _cleanup_finished_threads(self) -> None:
+        """Remove finished threads from the active threads list."""
+        with self._threads_lock:
+            self._active_threads = [t for t in self._active_threads if t.is_alive()]
+
+    def wait_for_pending_sends(self, timeout: Optional[float] = None) -> None:
+        """Wait for all pending send operations to complete.
+
+        This method blocks until all background send threads have finished.
+        Should be called before program exit to ensure all events are sent.
+
+        Args:
+            timeout: Maximum time to wait in seconds (None = wait indefinitely)
+        """
+        # Get a snapshot of active threads
+        with self._threads_lock:
+            threads_to_wait = self._active_threads.copy()
+
+        # Wait for each thread to complete
+        for thread in threads_to_wait:
+            if thread.is_alive():
+                thread.join(timeout=timeout)
+
+        # Clean up finished threads
+        self._cleanup_finished_threads()
+
     def close(self) -> None:
         """Close the HTTP session and cleanup resources."""
         self._session.close()

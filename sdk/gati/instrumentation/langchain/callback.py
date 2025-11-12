@@ -130,23 +130,27 @@ class GatiLangChainCallback(BaseCallbackHandler):
             gati_run_name = get_current_run_name()
 
             # If no GATI context, create a mapping for LangChain's run_id
-            if not gati_run_name:
+            if not gati_run_id:
                 # Check if parent has a GATI run_id mapping
                 if lc_parent_run_id and lc_parent_run_id in self._run_id_mapping:
                     # Use parent's GATI run_id (all events in same LangChain execution share same run)
-                    gati_run_name = self._run_id_mapping[lc_parent_run_id]
+                    gati_run_id = self._run_id_mapping[lc_parent_run_id]
                 elif lc_run_id in self._run_id_mapping:
                     # Already have a mapping for this LangChain run
-                    gati_run_name = self._run_id_mapping[lc_run_id]
+                    gati_run_id = self._run_id_mapping[lc_run_id]
                 else:
                     # Create new GATI run_id for this LangChain execution tree
-                    from gati.core.event import generate_run_name
-                    gati_run_name = generate_run_name()
-                    self._run_id_mapping[lc_run_id] = gati_run_name
+                    gati_run_id = generate_run_id()
+                    self._run_id_mapping[lc_run_id] = gati_run_id
+
+            # Generate run_name if not in context
+            if not gati_run_name:
+                from gati.core.event import generate_run_name
+                gati_run_name = generate_run_name()
 
             # Store mapping if not already present
             if lc_run_id and lc_run_id not in self._run_id_mapping:
-                self._run_id_mapping[lc_run_id] = gati_run_name
+                self._run_id_mapping[lc_run_id] = gati_run_id
 
             # Store timing
             if lc_run_id:
@@ -176,6 +180,7 @@ class GatiLangChainCallback(BaseCallbackHandler):
             # Don't create event yet to avoid duplicates
             if lc_run_id:
                 self._streaming_metadata[lc_run_id] = {
+                    "gati_run_id": gati_run_id,
                     "gati_run_name": gati_run_name,
                     "parent_event_id": parent_event_id,
                     "parent_run_id": lc_parent_run_id,
@@ -203,12 +208,16 @@ class GatiLangChainCallback(BaseCallbackHandler):
             # Get cached metadata from on_llm_start
             cached_metadata = self._streaming_metadata.get(lc_run_id, {})
 
-            # Get GATI run_id from context or mapping
-            gati_run_name = get_current_run_id()
-            if not gati_run_name and lc_run_id:
-                gati_run_name = self._run_id_mapping.get(lc_run_id, "")
+            # Get GATI run_id and run_name from context or mapping
+            gati_run_id = get_current_run_id()
+            gati_run_name = get_current_run_name()
 
-            # Use cached gati_run_name if current one is missing
+            if not gati_run_id and lc_run_id:
+                gati_run_id = self._run_id_mapping.get(lc_run_id, "")
+
+            # Use cached values if current ones are missing
+            if not gati_run_id and cached_metadata.get("gati_run_id"):
+                gati_run_id = cached_metadata["gati_run_id"]
             if not gati_run_name and cached_metadata.get("gati_run_name"):
                 gati_run_name = cached_metadata["gati_run_name"]
 
@@ -291,7 +300,7 @@ class GatiLangChainCallback(BaseCallbackHandler):
             llm_metadata = cached_metadata.get("llm_metadata", {})
 
             event = LLMCallEvent(
-                run_id=gati_run_name or "",
+                run_id=gati_run_id or "",
                 run_name=gati_run_name or "",  # Use GATI run_name from context or mapping
                 model=model_name,
                 prompt=user_prompt,
@@ -390,15 +399,18 @@ class GatiLangChainCallback(BaseCallbackHandler):
                 tags = kwargs.get("tags")
                 metadata = kwargs.get("metadata")
 
-                # Get or create GATI run_id mapping
-                gati_run_name = get_current_run_id()
-                if not gati_run_name:
+                # Get or create GATI run_id and run_name mapping
+                gati_run_id = get_current_run_id()
+                gati_run_name = get_current_run_name()
+
+                if not gati_run_id:
                     if lc_parent_run_id and lc_parent_run_id in self._run_id_mapping:
-                        gati_run_name = self._run_id_mapping[lc_parent_run_id]
+                        gati_run_id = self._run_id_mapping[lc_parent_run_id]
                     else:
-                        gati_run_name = self._run_id_mapping.get(lc_run_id, "")
+                        gati_run_id = self._run_id_mapping.get(lc_run_id, "")
 
                 self._streaming_metadata[lc_run_id] = {
+                    "gati_run_id": gati_run_id,
                     "gati_run_name": gati_run_name,
                     "parent_run_id": lc_parent_run_id,
                     "tags": tags or [],
@@ -533,18 +545,20 @@ class GatiLangChainCallback(BaseCallbackHandler):
             lc_run_id = self._safe_str(kwargs.get("run_id"))
             lc_parent_run_id = self._safe_str(kwargs.get("parent_run_id"))
 
-            # Get GATI run_id from context or mapping
-            gati_run_name = get_current_run_id()
-            if not gati_run_name and lc_run_id:
+            # Get GATI run_id and run_name from context or mapping
+            gati_run_id = get_current_run_id()
+            gati_run_name = get_current_run_name()
+
+            if not gati_run_id and lc_run_id:
                 # Use existing mapping or create new one
                 if lc_parent_run_id and lc_parent_run_id in self._run_id_mapping:
-                    gati_run_name = self._run_id_mapping[lc_parent_run_id]
+                    gati_run_id = self._run_id_mapping[lc_parent_run_id]
                 else:
-                    gati_run_name = self._run_id_mapping.get(lc_run_id, "")
+                    gati_run_id = self._run_id_mapping.get(lc_run_id, "")
 
             # Store mapping
-            if lc_run_id and lc_run_id not in self._run_id_mapping and gati_run_name:
-                self._run_id_mapping[lc_run_id] = gati_run_name
+            if lc_run_id and lc_run_id not in self._run_id_mapping and gati_run_id:
+                self._run_id_mapping[lc_run_id] = gati_run_id
 
             # Get parent event ID from context or mapping
             parent_event_id = get_parent_event_id()
@@ -582,10 +596,12 @@ class GatiLangChainCallback(BaseCallbackHandler):
             lc_run_id = self._safe_str(kwargs.get("run_id"))
             lc_parent_run_id = self._safe_str(kwargs.get("parent_run_id"))
 
-            # Get GATI run_id from context or mapping
-            gati_run_name = get_current_run_id()
-            if not gati_run_name and lc_run_id:
-                gati_run_name = self._run_id_mapping.get(lc_run_id, "")
+            # Get GATI run_id and run_name from context or mapping
+            gati_run_id = get_current_run_id()
+            gati_run_name = get_current_run_name()
+
+            if not gati_run_id and lc_run_id:
+                gati_run_id = self._run_id_mapping.get(lc_run_id, "")
 
             # Get parent event ID from context or mapping
             parent_event_id = get_parent_event_id()
@@ -612,7 +628,7 @@ class GatiLangChainCallback(BaseCallbackHandler):
                 return
 
             event = ToolCallEvent(
-                run_id=gati_run_name or "",
+                run_id=gati_run_id or "",
                 run_name=gati_run_name or "",
                 tool_name=tool_name,
                 input=tool_input,  # Use stored input from on_tool_start

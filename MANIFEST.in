@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include PRODUCTION_READY.md
+include docker-compose.yml
+include init-db.sql
+include .env.example
+recursive-include docs *.md
+recursive-include backend *.py *.txt *.md Dockerfile
+recursive-include dashboard *.tsx *.ts *.jsx *.js *.json *.html *.conf Dockerfile
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude node_modules
+global-exclude .DS_Store

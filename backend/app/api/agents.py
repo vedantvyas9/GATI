@@ -23,15 +23,37 @@ async def list_agents(
     List all agents with statistics.
 
     Returns a list of all registered agents including their metrics
-    (runs, events, cost, average cost).
+    (runs, events, cost, average cost), sorted by latest run (most recent first).
     """
     try:
-        stmt = select(Agent).order_by(Agent.created_at.desc())
-        result = await session.execute(stmt)
-        agents = result.scalars().all()
+        # Get all agents
+        agents_stmt = select(Agent)
+        agents_result = await session.execute(agents_stmt)
+        all_agents = agents_result.scalars().all()
+
+        # Get latest run timestamp for each agent
+        agent_latest_runs = {}
+        for agent in all_agents:
+            latest_run_stmt = (
+                select(func.max(Run.created_at))
+                .where(Run.agent_name == agent.name)
+            )
+            latest_run_result = await session.execute(latest_run_stmt)
+            latest_run = latest_run_result.scalar()
+            agent_latest_runs[agent.name] = latest_run
+
+        # Sort agents by latest run (most recent first)
+        # Agents with no runs will have None and appear last
+        from datetime import datetime
+
+        sorted_agents = sorted(
+            all_agents,
+            key=lambda a: agent_latest_runs[a.name] if agent_latest_runs[a.name] is not None else datetime.min.replace(tzinfo=agent_latest_runs[list(agent_latest_runs.keys())[0]].tzinfo if any(v is not None for v in agent_latest_runs.values()) else None),
+            reverse=True
+        )
 
         agent_stats = []
-        for agent in agents:
+        for agent in sorted_agents:
             # Get run statistics
             runs_stmt = select(
                 func.count(Run.run_name).label("total_runs"),

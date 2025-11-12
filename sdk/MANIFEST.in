@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include gati *.py
+recursive-include gati *.typed
+global-exclude __pycache__
+global-exclude *.py[co]

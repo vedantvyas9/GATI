@@ -13,8 +13,8 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from gati import observe 
-observe.init(agent_name = "travel agent", backend_url = "http://localhost:8000")
+from gati import observe
+observe.init(name="travel_agent", backend_url="http://localhost:8000")
 # -----------------
 # 1. INITIAL SETUP & STATE DEFINITION
 # -----------------

@@ -1,0 +1,15 @@
+{
+  "name": "gati-telemetry",
+  "version": "1.0.0",
+  "description": "GATI SDK Telemetry Backend",
+  "main": "api/metrics.js",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  }
+}
