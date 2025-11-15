@@ -1,159 +1,206 @@
 # GATI Dashboard
 
-Modern React web dashboard for visualizing and analyzing AI agent traces collected by the GATI SDK.
+Modern React-based web interface for visualizing and exploring AI agent traces.
 
 ## Overview
 
-The dashboard provides a visual interface to:
-- Browse all tracked agents and their runs
-- View detailed execution timelines
-- Analyze token usage and costs
-- Explore event hierarchies and execution flows
+The dashboard provides a visual interface for:
+- Browsing all tracked agents and their statistics
+- Viewing agent execution runs with detailed timelines
+- Exploring hierarchical event traces
+- Analyzing costs, token usage, and performance metrics
+- Debugging agent behavior and errors
 
 ## Features
 
-- **Agent List** - View all agents with aggregated statistics
-- **Run Browser** - Explore individual agent executions
-- **Event Timeline** - Chronological view of events within each run
-- **Metrics Display** - Token counts, costs, and durations
-- **Dark Mode** - Toggle between light and dark themes
-- **Responsive Design** - Works on desktop and tablet
+- **Agent List View** - Overview of all agents with aggregated statistics
+- **Run Browser** - Browse all runs for a specific agent with filtering
+- **Timeline View** - Chronological visualization of events
+- **Execution Graph** - Hierarchical tree visualization using ReactFlow
+- **Cost Analytics** - Detailed breakdown of LLM costs and token usage
+- **Real-time Updates** - Auto-refresh for active runs
+- **Dark Mode** - Modern dark theme optimized for readability
+- **Responsive Design** - Works on desktop and tablet devices
 
 ## Tech Stack
 
-- **React 18** - UI library
+- **React 18** - UI framework
 - **TypeScript** - Type-safe development
-- **Vite** - Fast build tool
-- **Tailwind CSS** - Styling
-- **React Router** - Routing
-- **Axios** - API client
+- **Vite** - Fast build tool and dev server
+- **React Router** - Client-side routing
+- **Tailwind CSS** - Utility-first styling
+- **Recharts** - Data visualization charts
+- **ReactFlow** - Interactive execution graphs
+- **Axios** - HTTP client for backend API
 
-## Setup
+## Installation
 
-### Using Docker Compose (Recommended)
+### Using Docker (Recommended)
 
-From the project root:
-
-```bash
-docker-compose up -d
-```
-
-Dashboard runs on http://localhost:3000
-
-### Local Development
-
-1. Install dependencies:
 ```bash
 cd dashboard
+docker build -t gati-dashboard .
+docker run -p 3000:80 gati-dashboard
+```
+
+### Manual Installation
+
+```bash
+cd dashboard
+
+# Install dependencies
 npm install
-```
 
-2. Configure API endpoint:
-
-Create `.env.local`:
-```bash
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-3. Start dev server:
-```bash
+# Start development server
 npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
 
-4. Build for production:
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file:
+
 ```bash
-npm run build
+# Backend API URL
+VITE_BACKEND_URL=http://localhost:8000
+
+# Port for development server
+PORT=3000
 ```
 
 ## Project Structure
 
 ```
 dashboard/
+├── public/               # Static assets
 ├── src/
 │   ├── components/      # Reusable UI components
-│   │   ├── Header.tsx
 │   │   ├── AgentCard.tsx
-│   │   ├── RunDetail.tsx
-│   │   └── Timeline.tsx
-│   ├── pages/           # Page components
-│   │   ├── AgentsList.tsx
-│   │   └── AgentDetail.tsx
-│   ├── services/
-│   │   └── api.ts       # API client
-│   ├── types/
-│   │   └── index.ts     # TypeScript types
-│   ├── styles/
-│   │   └── globals.css  # Global styles
-│   ├── App.tsx          # Root component
-│   └── main.tsx         # Entry point
-├── public/              # Static assets
-├── index.html
-└── package.json
+│   │   ├── RunCard.tsx
+│   │   ├── Timeline.tsx
+│   │   ├── ExecutionGraph.tsx
+│   │   └── CostChart.tsx
+│   ├── pages/          # Route pages
+│   │   ├── AgentsPage.tsx
+│   │   ├── AgentDetailPage.tsx
+│   │   ├── RunDetailPage.tsx
+│   │   └── NotFoundPage.tsx
+│   ├── services/       # API client
+│   │   └── api.ts      # Axios backend client
+│   ├── hooks/          # Custom React hooks
+│   │   ├── useAgents.ts
+│   │   ├── useRuns.ts
+│   │   └── usePolling.ts
+│   ├── types/          # TypeScript definitions
+│   │   └── index.ts    # Shared types
+│   ├── styles/         # Global styles
+│   │   └── index.css
+│   ├── App.tsx         # Main app component
+│   └── main.tsx        # Entry point
+├── index.html          # HTML template
+├── vite.config.ts      # Vite configuration
+├── tailwind.config.js  # Tailwind CSS config
+├── tsconfig.json       # TypeScript config
+└── package.json        # Dependencies
 ```
 
 ## API Integration
 
-The dashboard connects to the GATI Backend API:
+The dashboard communicates with the GATI backend via REST API.
+
+### Endpoints Used
 
 - `GET /api/agents` - List all agents
-- `GET /api/agents/{agent_name}` - Agent details
-- `GET /api/agents/{agent_name}/runs` - Agent runs
-- `GET /api/runs/{run_id}` - Run details
-- `GET /api/runs/{run_id}/timeline` - Event timeline
+- `GET /api/agents/{name}/runs` - Get runs for agent
+- `GET /api/runs/{run_id}` - Get run details
+- `GET /api/runs/{run_id}/timeline` - Get event timeline
+- `GET /api/runs/{run_id}/trace` - Get execution tree
 - `GET /api/metrics/summary` - Global metrics
-
-Configure the API URL in [src/services/api.ts](src/services/api.ts) or via environment variable.
-
-## Styling
-
-The dashboard uses Tailwind CSS with a custom theme:
-
-- **Primary**: Navy Blue (#1e3a8a)
-- **Font**: Garamond (headings), system sans-serif (body)
-- **Dark Mode**: Full support with system preference detection
-
-Customize in [tailwind.config.js](tailwind.config.js).
 
 ## Development
 
-### Type Checking
+### Running Development Server
+
 ```bash
-npm run type-check
+npm run dev
 ```
 
-### Linting
-```bash
-npm run lint
-```
+Dashboard available at [http://localhost:3000](http://localhost:3000).
 
-### Build
+### Building for Production
+
 ```bash
 npm run build
+# Output: dist/
+```
+
+### Type Checking
+
+```bash
+npx tsc --noEmit
 ```
 
 ## Deployment
 
-### Docker
+### Production Build
+
+```bash
+npm run build
+```
+
+### Nginx Configuration
+
+See [nginx.conf](nginx.conf:1) for production server setup.
+
+### Docker Deployment
+
 ```bash
 docker build -t gati-dashboard .
-docker run -p 3000:3000 gati-dashboard
+docker run -p 3000:80 gati-dashboard
 ```
 
 ### Static Hosting
 
-Build and deploy the `dist/` folder to:
-- Vercel
-- Netlify
-- AWS S3 + CloudFront
-- GitHub Pages
+Deploy `dist/` folder to:
+- **Vercel** - `vercel deploy`
+- **Netlify** - Drag and drop
+- **GitHub Pages** - Push to gh-pages branch
+- **AWS S3** - Upload to bucket
+
+## Troubleshooting
+
+### Backend Connection Issues
+
+```bash
+# Check backend URL
+cat .env
+
+# Verify backend is running
+curl http://localhost:8000/health
+```
+
+### Build Errors
+
+```bash
+# Clear and reinstall
+rm -rf node_modules package-lock.json
+npm install
+```
 
 ## Browser Support
 
-- Chrome/Edge: Latest
-- Firefox: Latest
-- Safari: Latest
-- Mobile: iOS Safari 14+, Chrome Android
+- Chrome/Edge: Latest 2 versions
+- Firefox: Latest 2 versions
+- Safari: Latest 2 versions
+- Mobile: iOS 12+, Android 8+
 
 ## License
 
-MIT
+MIT License - see [LICENSE](../LICENSE) for details

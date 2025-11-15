@@ -1,191 +1,390 @@
 # GATI Backend
 
-FastAPI-based backend service that receives and stores agent trace data from the GATI SDK.
+FastAPI-based REST API server for receiving, storing, and serving AI agent trace data.
 
 ## Overview
 
-The backend provides a REST API for:
-- Receiving trace events from the GATI SDK
-- Storing agent runs, events, and metrics in PostgreSQL
-- Serving trace data to the dashboard
-- Aggregating metrics and analytics
+The backend component is responsible for:
+- Receiving trace events from the GATI SDK via HTTP
+- Storing events in a local SQLite database (migrated from PostgreSQL)
+- Providing REST API endpoints for the dashboard and MCP server
+- Managing agent runs and event hierarchies
+- Calculating costs and token usage metrics
 
 ## Architecture
 
 ```
-GATI SDK → Backend API → PostgreSQL
-                ↓
-            Dashboard
+┌─────────────────┐
+│   GATI SDK      │
+│  (Instrumented  │
+│   Agent Code)   │
+└────────┬────────┘
+         │ HTTP POST
+         ▼
+┌─────────────────────────────────────┐
+│         FastAPI Backend             │
+│                                     │
+│  ┌──────────────────────────────┐  │
+│  │      API Endpoints           │  │
+│  │  POST /api/events            │  │
+│  │  GET  /api/agents            │  │
+│  │  GET  /api/runs              │  │
+│  │  GET  /api/metrics           │  │
+│  └──────────────────────────────┘  │
+│              │                      │
+│              ▼                      │
+│  ┌──────────────────────────────┐  │
+│  │     SQLAlchemy ORM           │  │
+│  └──────────────────────────────┘  │
+│              │                      │
+│              ▼                      │
+│  ┌──────────────────────────────┐  │
+│  │   SQLite Database (WAL)      │  │
+│  │  • agents                    │  │
+│  │  • runs                      │  │
+│  │  • events                    │  │
+│  └──────────────────────────────┘  │
+└─────────────────────────────────────┘
+         │
+         ├──────────────┬──────────────┐
+         ▼              ▼              ▼
+  ┌──────────┐   ┌──────────┐   ┌──────────┐
+  │Dashboard │   │MCP Server│   │  CLI     │
+  └──────────┘   └──────────┘   └──────────┘
 ```
 
-### Key Components
+## Database Schema
 
-- **FastAPI Application** - Async REST API server
-- **PostgreSQL Database** - Stores all trace data
-- **SQLAlchemy ORM** - Database models and queries
-- **Alembic** - Database migrations
+### Tables
 
-### Database Schema
+**agents**
+- `id` (INTEGER, PK) - Auto-incrementing ID
+- `name` (TEXT, UNIQUE) - Agent name
+- `description` (TEXT, nullable) - Agent description
+- `framework` (TEXT) - Framework type (langchain, langgraph, custom)
+- `created_at` (TIMESTAMP) - First seen timestamp
+- `updated_at` (TIMESTAMP) - Last activity timestamp
 
-**agents** - Tracked AI agents
-- name (PK)
-- description
-- created_at, updated_at
+**runs**
+- `id` (INTEGER, PK) - Auto-incrementing ID
+- `run_id` (TEXT, UNIQUE) - UUID for the run
+- `agent_id` (INTEGER, FK) - References agents.id
+- `status` (TEXT) - success, error, running
+- `started_at` (TIMESTAMP) - Run start time
+- `ended_at` (TIMESTAMP, nullable) - Run end time
+- `duration_ms` (INTEGER, nullable) - Total duration in milliseconds
+- `total_cost` (REAL) - Total LLM API cost in USD
+- `total_tokens` (INTEGER) - Total tokens used
+- `error_message` (TEXT, nullable) - Error details if failed
 
-**runs** - Individual agent executions
-- run_id (PK, UUID)
-- agent_name (FK)
-- environment
-- status (active, completed, failed)
-- total_duration_ms
-- total_cost
-- tokens_in, tokens_out
-- run_metadata (JSONB)
-- created_at, updated_at
+**events**
+- `id` (INTEGER, PK) - Auto-incrementing ID
+- `event_id` (TEXT, UNIQUE) - UUID for the event
+- `run_id` (TEXT, FK) - References runs.run_id
+- `parent_event_id` (TEXT, nullable) - Parent event for hierarchy
+- `event_type` (TEXT) - Type (agent_start, llm_call, tool_call, etc.)
+- `timestamp` (TIMESTAMP) - Event timestamp
+- `data` (JSON) - Event payload
+- `duration_ms` (INTEGER, nullable) - Event duration
+- `cost` (REAL, nullable) - Cost for this event
+- `tokens` (INTEGER, nullable) - Tokens for this event
 
-**events** - Operation events within runs
-- event_id (PK, UUID)
-- run_id (FK)
-- agent_name
-- event_type (llm_call, tool_call, agent_start, etc.)
-- timestamp
-- data (JSONB) - Contains parent_run_id for hierarchical tracing
-- created_at, updated_at
+### Indexes
 
-## Setup
-
-### Using Docker Compose (Recommended)
-
-From the project root:
-
-```bash
-docker-compose up -d
+```sql
+CREATE INDEX idx_runs_agent_id ON runs(agent_id);
+CREATE INDEX idx_runs_started_at ON runs(started_at);
+CREATE INDEX idx_events_run_id ON events(run_id);
+CREATE INDEX idx_events_parent_id ON events(parent_event_id);
+CREATE INDEX idx_events_timestamp ON events(timestamp);
 ```
 
-This starts:
-- Backend API on http://localhost:8000
-- PostgreSQL on port 5432
-- Dashboard on http://localhost:3000
+## Installation
 
-### Local Development
+### Using Docker (Recommended)
 
-1. Install dependencies:
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate
+docker build -t gati-backend .
+docker run -p 8000:8000 -v $(pwd)/gati.db:/app/gati.db gati-backend
+```
+
+### Manual Installation
+
+```bash
+cd backend
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-2. Configure environment:
-```bash
-cp .env.example .env
-# Edit .env with your database credentials
-```
-
-3. Run migrations:
-```bash
+# Run migrations
 alembic upgrade head
+
+# Start server
+uvicorn app.main:app --reload --port 8000
 ```
 
-4. Start server:
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file:
+
 ```bash
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Database
+DATABASE_URL=sqlite+aiosqlite:///./gati.db
+
+# Server
+BACKEND_PORT=8000
+HOST=0.0.0.0
+
+# Timezone (for timestamp display)
+TZ=America/Chicago
+
+# CORS (comma-separated origins)
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Admin (optional)
+ADMIN_TOKEN=your-secret-token-here
+
+# Logging
+LOG_LEVEL=INFO
 ```
 
 ## API Endpoints
 
-### Health
-- `GET /health` - Health check
+### Health Check
 
-### Events
-- `POST /api/events` - Bulk ingest events (up to 10,000 per batch)
+**GET /health**
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "version": "0.1.0"
+}
+```
 
-### Agents
-- `GET /api/agents` - List all agents
-- `GET /api/agents/{agent_name}` - Get agent details
-- `GET /api/agents/{agent_name}/runs` - Get agent runs
+### Event Ingestion
 
-### Runs
-- `GET /api/runs/{run_id}` - Get run details
-- `GET /api/runs/{run_id}/timeline` - Get event timeline
-- `GET /api/runs/{run_id}/trace` - Get execution tree
+**POST /api/events**
 
-### Metrics
-- `GET /api/metrics/summary` - Global metrics
-- `GET /api/agents/{agent_name}/metrics` - Per-agent metrics
+Bulk event ingestion (up to 10,000 events per request).
 
-## Configuration
+Request:
+```json
+{
+  "events": [
+    {
+      "event_id": "uuid",
+      "run_id": "uuid",
+      "parent_event_id": "uuid or null",
+      "event_type": "agent_start",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "data": {
+        "agent_name": "ResearchAgent",
+        "input": {"query": "What is AI?"}
+      }
+    }
+  ]
+}
+```
 
-Environment variables (`.env`):
+Response:
+```json
+{
+  "status": "success",
+  "events_received": 1
+}
+```
+
+### Agent Endpoints
+
+**GET /api/agents**
+
+List all tracked agents with statistics.
+
+**GET /api/agents/{name}/runs**
+
+Get all runs for a specific agent.
+
+Query params:
+- `limit` (int, default=50)
+- `offset` (int, default=0)
+- `status` (string, optional)
+
+### Run Endpoints
+
+**GET /api/runs/{run_id}**
+
+Get detailed information about a specific run.
+
+**GET /api/runs/{run_id}/timeline**
+
+Get chronological event timeline.
+
+**GET /api/runs/{run_id}/trace**
+
+Get hierarchical execution trace.
+
+### Metrics Endpoints
+
+**GET /api/metrics/summary**
+
+Get global metrics across all agents and runs.
+
+## Database Migrations
+
+### Creating a Migration
 
 ```bash
-# Database
-DATABASE_URL=postgresql://gati_user:gati_password@localhost:5432/gati_db
-DATABASE_POOL_SIZE=20
+# After modifying models in app/models/
+alembic revision --autogenerate -m "Description of changes"
+```
 
-# CORS
-CORS_ORIGINS=*
+### Applying Migrations
 
-# Application
-DEBUG=false
-ENVIRONMENT=production
-API_PREFIX=/api
+```bash
+# Upgrade to latest
+alembic upgrade head
+
+# Upgrade one version
+alembic upgrade +1
+
+# Downgrade one version
+alembic downgrade -1
+
+# Show current version
+alembic current
 ```
 
 ## Development
 
+### Project Structure
+
+```
+backend/
+├── alembic/              # Database migrations
+│   ├── versions/         # Migration files
+│   └── env.py           # Alembic config
+├── app/
+│   ├── main.py          # FastAPI application
+│   ├── api/             # API route handlers
+│   │   ├── events.py    # Event ingestion
+│   │   ├── agents.py    # Agent endpoints
+│   │   ├── runs.py      # Run endpoints
+│   │   └── metrics.py   # Metrics endpoints
+│   ├── database/        # Database connection
+│   ├── models/          # SQLAlchemy models
+│   ├── schemas/         # Pydantic schemas
+│   ├── services/        # Business logic
+│   └── utils/           # Utilities
+├── Dockerfile           # Container build
+├── requirements.txt     # Python dependencies
+└── README.md           # This file
+```
+
 ### Running Tests
+
 ```bash
-pytest tests/ -v
+# Install test dependencies
+pip install pytest pytest-asyncio httpx
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app
 ```
 
-### Database Migrations
+### Local Development
+
 ```bash
-# Create migration
-alembic revision --autogenerate -m "description"
+# Start with auto-reload
+uvicorn app.main:app --reload --port 8000
 
-# Apply migrations
-alembic upgrade head
-
-# Rollback
-alembic downgrade -1
-```
-
-### Code Quality
-```bash
-black .
-mypy .
-flake8 .
+# Enable debug logging
+LOG_LEVEL=DEBUG uvicorn app.main:app --reload
 ```
 
 ## Performance
 
-- **Event Ingestion**: ~10,000 events/second
-- **Connection Pooling**: 20 connections (configurable)
-- **Bulk Inserts**: Single transaction for batch events
-- **Indexes**: Optimized for common query patterns
+### Optimization Features
+
+- **Bulk Inserts**: Events inserted in batches (up to 10,000)
+- **Connection Pooling**: Async connection pool
+- **WAL Mode**: SQLite Write-Ahead Logging for concurrent reads
+- **Indexed Queries**: Strategic indexes on foreign keys and timestamps
+- **Async I/O**: All database operations are async
+
+### Benchmarks
+
+- **Event Ingestion**: ~5,000 events/second
+- **Query Response**: <50ms for most queries
+- **Database Size**: ~1KB per event
 
 ## Troubleshooting
 
-### Database connection issues
-```bash
-# Test connection
-psql postgresql://user:password@localhost:5432/gati_db -c "SELECT 1"
+### Database Locked Errors
 
-# Check Docker logs
-docker-compose logs backend
+```bash
+# Check if WAL mode is enabled
+sqlite3 gati.db "PRAGMA journal_mode;"
+
+# Enable WAL mode manually
+sqlite3 gati.db "PRAGMA journal_mode=WAL;"
 ```
 
-### Migration issues
-```bash
-# Check current migration
-alembic current
+### Migration Issues
 
-# View history
-alembic history
+```bash
+# Reset database (CAUTION: deletes all data)
+rm gati.db
+alembic upgrade head
+```
+
+### CORS Errors
+
+Add your frontend URL to CORS_ORIGINS:
+
+```bash
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+```
+
+## Security
+
+### Best Practices
+
+- Never expose backend directly to internet
+- Set ADMIN_TOKEN for protected endpoints
+- Use HTTPS in production
+- Implement rate limiting in reverse proxy
+- Regular database backups
+
+## Backup & Restore
+
+### Backup
+
+```bash
+# Stop backend first
+docker-compose stop backend
+
+# Backup database
+cp backend/gati.db backend/gati.db.backup-$(date +%Y%m%d)
+```
+
+### Restore
+
+```bash
+# Stop backend
+docker-compose stop backend
+
+# Restore from backup
+cp backend/gati.db.backup-20240115 backend/gati.db
+
+# Start backend
+docker-compose start backend
 ```
 
 ## License
 
-MIT
+MIT License - see [LICENSE](../LICENSE) for details

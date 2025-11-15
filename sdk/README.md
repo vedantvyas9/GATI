@@ -1,27 +1,23 @@
-# GATI SDK - Technical Deep Dive
+# GATI SDK
 
-**A comprehensive guide to understanding the GATI SDK's architecture, instrumentation mechanisms, and data flow.**
+Python instrumentation library for tracking AI agent executions with minimal code changes.
 
----
+## Overview
 
-## Table of Contents
+The GATI SDK automatically instruments your AI agent code to capture:
+- LLM calls (prompts, completions, models, costs)
+- Tool executions (inputs, outputs, durations)
+- Agent state transitions
+- Event hierarchies and execution traces
+- Token usage and API costs
 
-1. [Architecture Overview](#architecture-overview)
-2. [Core System Components](#core-system-components)
-3. [Instrumentation Deep Dive](#instrumentation-deep-dive)
-   - [LangChain Instrumentation](#langchain-instrumentation)
-   - [LangGraph Instrumentation](#langgraph-instrumentation)
-   - [Custom Python Instrumentation](#custom-python-instrumentation)
-4. [Event System & Data Flow](#event-system--data-flow)
-5. [Context Management & Run Tracking](#context-management--run-tracking)
-6. [Buffering & Network Communication](#buffering--network-communication)
-7. [Class Structure Reference](#class-structure-reference)
+All data is sent to a local backend for visualization and analysis.
 
----
+## Installation
 
-## Architecture Overview
-
-The GATI SDK is designed around **event-driven observability** for AI agent workflows. Think of it as a surveillance system that watches your agent execute, captures every important action (LLM calls, tool uses, state changes), packages them into structured events, and ships them to a backend for analysis.
+```bash
+pip install gati
+```
 
 ### High-Level Flow
 
