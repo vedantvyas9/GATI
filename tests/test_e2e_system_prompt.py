@@ -20,7 +20,7 @@ def test_system_prompt_extraction_with_explicit_callbacks():
         from langchain_core.messages import SystemMessage, HumanMessage
 
         # Initialize observe
-        observe.init(backend_url="http://localhost:8000", agent_name="test-agent")
+        observe.init(name="test-agent")
 
         # Create a prompt with system message
         prompt = ChatPromptTemplate.from_messages([

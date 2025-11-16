@@ -21,7 +21,7 @@ from langchain_core.runnables import RunnablePassthrough
 
 # ===== GATI INITIALIZATION (2 LINES) =====
 from gati import observe
-observe.init(name="langchain_demo", backend_url="http://localhost:8000")
+observe.init(name="langchain_demo")
 # ==========================================
 
 # Load environment variables

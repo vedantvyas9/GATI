@@ -20,7 +20,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 # ===== GATI INITIALIZATION (2 LINES) =====
 from gati import observe
-observe.init(name="langgraph_demo", backend_url="http://localhost:8000")
+observe.init(name="langgraph_demo")
 # ==========================================
 
 # Load environment variables

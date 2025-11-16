@@ -9,7 +9,7 @@ Usage:
     from gati import observe
 
     # Initialize - that's it! LangChain components are auto-instrumented
-    observe.init(backend_url="http://localhost:8000")
+    observe.init(name="my_agent")
 
     # Use LangChain normally - everything is tracked automatically
     from langchain_openai import ChatOpenAI

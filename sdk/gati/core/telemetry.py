@@ -4,7 +4,7 @@ This module collects anonymous usage statistics to help improve the SDK.
 No sensitive data (prompts, completions, API keys, or PII) is ever collected.
 
 Telemetry is OPT-IN by default and can be disabled by setting:
-    observe.init(backend_url="...", telemetry=False)
+    observe.init(name="my_agent", telemetry=False)
 
 Data collected:
 - SDK version

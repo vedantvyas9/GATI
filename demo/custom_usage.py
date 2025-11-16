@@ -17,7 +17,7 @@ from openai import OpenAI
 
 # ===== GATI INITIALIZATION (2 LINES) =====
 from gati import observe
-observe.init(name="custom_agent", backend_url="http://localhost:8000")
+observe.init(name="custom_agent")
 # ==========================================
 
 # Additional imports for decorators

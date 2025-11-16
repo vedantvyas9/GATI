@@ -8,7 +8,7 @@ Usage:
     from gati import observe
 
     # Initialize - that's it! LangGraph graphs are auto-instrumented
-    observe.init(backend_url="http://localhost:8000")
+    observe.init(name="my_agent")
 
     # Use LangGraph normally - everything is tracked automatically
     from langgraph.graph import StateGraph
@@ -567,8 +567,8 @@ def _extract_graph_structure(
         edges_with_metadata: Dict[str, Any] = {}
 
         # DEBUG: Log pregel attributes to help diagnose edge extraction
-        logger.debug(f"Pregel type: {type(pregel).__name__}")
-        logger.debug(f"Pregel attributes: {[attr for attr in dir(pregel) if not attr.startswith('_')]}")
+        # logger.debug(f"Pregel type: {type(pregel).__name__}")
+        # logger.debug(f"Pregel attributes: {[attr for attr in dir(pregel) if not attr.startswith('_')]}")
 
         # Method 1: Try _edges attribute directly
         edge_extraction_methods_tried = []
@@ -576,7 +576,7 @@ def _extract_graph_structure(
             edge_extraction_methods_tried.append("pregel._edges")
             try:
                 pregel_edges = pregel._edges
-                logger.debug(f"Found pregel._edges: {type(pregel_edges)}, content: {pregel_edges}")
+                # logger.debug(f"Found pregel._edges: {type(pregel_edges)}, content: {pregel_edges}")
                 if isinstance(pregel_edges, dict):
                     for source, targets in pregel_edges.items():
                         if isinstance(targets, (list, tuple, set)):
@@ -621,14 +621,15 @@ def _extract_graph_structure(
                                     "file": condition_file,
                                 })
                                 structure["conditional_edge_count"] += 1
-                logger.debug(f"Extracted {len(edges)} edges from pregel._edges")
+                # logger.debug(f"Extracted {len(edges)} edges from pregel._edges")
             except Exception as e:
-                logger.debug(f"Failed to extract edges from pregel._edges: {e}")
+                # logger.debug(f"Failed to extract edges from pregel._edges: {e}")
+                pass
 
         # Method 2: Try builder edges (StateGraph builder)
         if not edges and hasattr(pregel, "builder"):
             edge_extraction_methods_tried.append("pregel.builder")
-            logger.debug(f"Found pregel.builder: {type(pregel.builder)}")
+            # logger.debug(f"Found pregel.builder: {type(pregel.builder)}")
 
             # Try multiple builder attributes
             builder = pregel.builder
@@ -638,7 +639,7 @@ def _extract_graph_structure(
                 edge_extraction_methods_tried.append("pregel.builder._all_edges")
                 try:
                     all_edges = builder._all_edges
-                    logger.debug(f"Found pregel.builder._all_edges: {type(all_edges)}, content: {all_edges}")
+                    # logger.debug(f"Found pregel.builder._all_edges: {type(all_edges)}, content: {all_edges}")
                     # _all_edges can be a set, list, or tuple
                     edge_collection = list(all_edges) if isinstance(all_edges, (set, list, tuple)) else []
                     for edge_spec in edge_collection:
@@ -669,16 +670,17 @@ def _extract_graph_structure(
                                     "module": None,
                                     "file": None,
                                 })
-                    logger.debug(f"Extracted {len(edges)} edges from pregel.builder._all_edges")
+                    # logger.debug(f"Extracted {len(edges)} edges from pregel.builder._all_edges")
                 except Exception as e:
-                    logger.debug(f"Failed to extract edges from pregel.builder._all_edges: {e}")
+                    # logger.debug(f"Failed to extract edges from pregel.builder._all_edges: {e}")
+                    pass
 
             # Try _edges
             if not edges and hasattr(builder, "_edges"):
                 edge_extraction_methods_tried.append("pregel.builder._edges")
                 try:
                     builder_edges = builder._edges
-                    logger.debug(f"Found pregel.builder._edges: {type(builder_edges)}, content: {builder_edges}")
+                    # logger.debug(f"Found pregel.builder._edges: {type(builder_edges)}, content: {builder_edges}")
                     if isinstance(builder_edges, dict):
                         for source, targets in builder_edges.items():
                             if isinstance(targets, (list, tuple, set)):
@@ -744,15 +746,16 @@ def _extract_graph_structure(
                                     "module": None,
                                     "file": None,
                                 })
-                    logger.debug(f"Extracted {len(edges)} edges from pregel.builder._edges")
+                    # logger.debug(f"Extracted {len(edges)} edges from pregel.builder._edges")
                 except Exception as e:
-                    logger.debug(f"Failed to extract edges from pregel.builder._edges: {e}")
+                    # logger.debug(f"Failed to extract edges from pregel.builder._edges: {e}")
+                    pass
 
             # Try entry_point
             if hasattr(builder, "_entry_point") or hasattr(builder, "entry_point"):
                 entry = getattr(builder, "_entry_point", None) or getattr(builder, "entry_point", None)
                 if entry:
-                    logger.debug(f"Found builder entry_point: {entry}")
+                    # logger.debug(f"Found builder entry_point: {entry}")
                     # Add edge from __start__ to entry point
                     if not any(e["from"] == "__start__" and e["to"] == entry for e in edges):
                         edges.append({
@@ -765,20 +768,20 @@ def _extract_graph_structure(
                             "module": None,
                             "file": None,
                         })
-                        logger.debug(f"Added __start__ -> {entry} edge from entry_point")
+                        # logger.debug(f"Added __start__ -> {entry} edge from entry_point")
 
         # Method 3: Try channels structure (newer LangGraph versions)
         if not edges and hasattr(pregel, "channels"):
             edge_extraction_methods_tried.append("pregel.channels")
             try:
                 channels = pregel.channels
-                logger.debug(f"Found pregel.channels: {type(channels)}, keys: {list(channels.keys()) if isinstance(channels, dict) else 'not a dict'}")
+                # logger.debug(f"Found pregel.channels: {type(channels)}, keys: {list(channels.keys()) if isinstance(channels, dict) else 'not a dict'}")
                 # In newer LangGraph, edges might be stored differently
                 # Try to look for graph attribute
                 if hasattr(pregel, "graph"):
                     edge_extraction_methods_tried.append("pregel.graph")
                     graph = pregel.graph
-                    logger.debug(f"Found pregel.graph: {type(graph)}, attributes: {[attr for attr in dir(graph) if not attr.startswith('_')]}")
+                    # logger.debug(f"Found pregel.graph: {type(graph)}, attributes: {[attr for attr in dir(graph) if not attr.startswith('_')]}")
 
                     # Try different edge attributes on the graph
                     for edge_attr in ["edges", "_edges", "edge_list", "_edge_list"]:
@@ -786,7 +789,7 @@ def _extract_graph_structure(
                             edge_extraction_methods_tried.append(f"pregel.graph.{edge_attr}")
                             try:
                                 graph_edges = getattr(graph, edge_attr)
-                                logger.debug(f"Found pregel.graph.{edge_attr}: {type(graph_edges)}, content: {graph_edges}")
+                                # logger.debug(f"Found pregel.graph.{edge_attr}: {type(graph_edges)}, content: {graph_edges}")
                                 if isinstance(graph_edges, (list, tuple)):
                                     for edge in graph_edges:
                                         if isinstance(edge, dict):
@@ -825,20 +828,22 @@ def _extract_graph_structure(
                                                     "module": None,
                                                     "file": None,
                                                 })
-                                logger.debug(f"Extracted {len(edges)} edges from pregel.graph.{edge_attr}")
+                                # logger.debug(f"Extracted {len(edges)} edges from pregel.graph.{edge_attr}")
                                 if edges:
                                     break
                             except Exception as e:
-                                logger.debug(f"Failed to extract from pregel.graph.{edge_attr}: {e}")
+                                # logger.debug(f"Failed to extract from pregel.graph.{edge_attr}: {e}")
+                                pass
             except Exception as e:
-                logger.debug(f"Failed to extract edges from channels structure: {e}")
+                # logger.debug(f"Failed to extract edges from channels structure: {e}")
+                pass
 
         # Method 4: Try trigger_to_nodes mapping (newer LangGraph versions)
         if not edges and hasattr(pregel, "trigger_to_nodes"):
             edge_extraction_methods_tried.append("pregel.trigger_to_nodes")
             try:
                 trigger_to_nodes = pregel.trigger_to_nodes
-                logger.debug(f"Found pregel.trigger_to_nodes: {type(trigger_to_nodes)}, content: {trigger_to_nodes}")
+                # logger.debug(f"Found pregel.trigger_to_nodes: {type(trigger_to_nodes)}, content: {trigger_to_nodes}")
 
                 # In newer LangGraph, we need to find which nodes write to which trigger channels
                 # Build a mapping of: trigger_channel -> nodes that write to it
@@ -849,7 +854,7 @@ def _extract_graph_structure(
                         # Check if node has writers attribute (channels it writes to)
                         if hasattr(node_obj, "writers"):
                             writers = getattr(node_obj, "writers", [])
-                            logger.debug(f"Node '{node_name}' writes to: {writers}")
+                            # logger.debug(f"Node '{node_name}' writes to: {writers}")
                             # Build reverse mapping: which triggers does this node activate?
                             if isinstance(writers, (list, tuple)):
                                 for writer in writers:
@@ -872,7 +877,7 @@ def _extract_graph_structure(
                         # Also check flat_writers
                         if hasattr(node_obj, "flat_writers"):
                             flat_writers = getattr(node_obj, "flat_writers")
-                            logger.debug(f"Node '{node_name}' has flat_writers (type: {type(flat_writers)})")
+                            # logger.debug(f"Node '{node_name}' has flat_writers (type: {type(flat_writers)})")
                             if isinstance(flat_writers, (list, tuple)):
                                 for writer in flat_writers:
                                     channel_name = None
@@ -891,12 +896,12 @@ def _extract_graph_structure(
                                         if node_name not in trigger_writers[channel_name]:
                                             trigger_writers[channel_name].append(node_name)
 
-                logger.debug(f"Trigger writers mapping: {trigger_writers}")
+                # logger.debug(f"Trigger writers mapping: {trigger_writers}")
 
                 # Now build edges: for each trigger channel, connect writers to targets
                 if isinstance(trigger_to_nodes, dict):
                     for trigger_channel, target_nodes in trigger_to_nodes.items():
-                        logger.debug(f"Trigger channel '{trigger_channel}' activates nodes: {target_nodes}")
+                        # logger.debug(f"Trigger channel '{trigger_channel}' activates nodes: {target_nodes}")
 
                         # Find which nodes write to this trigger
                         source_nodes = trigger_writers.get(trigger_channel, [])
@@ -940,23 +945,24 @@ def _extract_graph_structure(
                                         "file": None,
                                     })
 
-                    logger.debug(f"Extracted {len(edges)} edges from pregel.trigger_to_nodes")
+                    # logger.debug(f"Extracted {len(edges)} edges from pregel.trigger_to_nodes")
             except Exception as e:
-                logger.debug(f"Failed to extract edges from trigger_to_nodes: {e}")
-                logger.debug(f"Traceback: {traceback.format_exc()}")
+                # logger.debug(f"Failed to extract edges from trigger_to_nodes: {e}")
+                # logger.debug(f"Traceback: {traceback.format_exc()}")
+                pass
 
         # Method 5: Try nodes attribute for edge connections (fallback)
         if not edges and hasattr(pregel, "nodes") and isinstance(pregel.nodes, dict):
             edge_extraction_methods_tried.append("pregel.nodes connections")
             try:
                 for node_name, node_obj in pregel.nodes.items():
-                    logger.debug(f"Examining node '{node_name}': {type(node_obj)}, attributes: {[attr for attr in dir(node_obj) if not attr.startswith('_')][:10]}")
+                    # logger.debug(f"Examining node '{node_name}': {type(node_obj)}, attributes: {[attr for attr in dir(node_obj) if not attr.startswith('_')][:10]}")
                     # Try to find outgoing edges from the node
                     for edge_attr in ["triggers", "next", "edges", "connections", "outputs"]:
                         if hasattr(node_obj, edge_attr):
                             try:
                                 targets = getattr(node_obj, edge_attr)
-                                logger.debug(f"Node '{node_name}' has {edge_attr}: {targets}")
+                                # logger.debug(f"Node '{node_name}' has {edge_attr}: {targets}")
                                 if isinstance(targets, (list, tuple, set)):
                                     for target in targets:
                                         edges.append({
@@ -993,16 +999,18 @@ def _extract_graph_structure(
                                         "file": None,
                                     })
                             except Exception as e:
-                                logger.debug(f"Failed to extract {edge_attr} from node '{node_name}': {e}")
-                logger.debug(f"Extracted {len(edges)} edges from node connections")
+                                # logger.debug(f"Failed to extract {edge_attr} from node '{node_name}': {e}")
+                                pass
+                # logger.debug(f"Extracted {len(edges)} edges from node connections")
             except Exception as e:
-                logger.debug(f"Failed to extract edges from nodes: {e}")
+                # logger.debug(f"Failed to extract edges from nodes: {e}")
+                pass
 
         # Log which methods were tried
-        logger.debug(f"Edge extraction methods tried: {edge_extraction_methods_tried}")
-        logger.debug(f"Total edges found so far: {len(edges)}")
-        if edges:
-            logger.debug(f"Edge details: {[(e['from'], e['to'], e['type']) for e in edges]}")
+        # logger.debug(f"Edge extraction methods tried: {edge_extraction_methods_tried}")
+        # logger.debug(f"Total edges found so far: {len(edges)}")
+        # if edges:
+        #     logger.debug(f"Edge details: {[(e['from'], e['to'], e['type']) for e in edges]}")
 
         # Deduplicate edges
         unique_edges = {}
@@ -1031,20 +1039,21 @@ def _extract_graph_structure(
         structure["total_edges"] = len(structure["edges"])
 
         # Log extraction summary
-        conditional_count = structure["conditional_edge_count"]
-        logger.debug(
-            f"Extracted graph structure: {structure['total_nodes']} nodes, "
-            f"{structure['total_edges']} edges ({conditional_count} conditional)"
-        )
+        # conditional_count = structure["conditional_edge_count"]
+        # logger.debug(
+        #     f"Extracted graph structure: {structure['total_nodes']} nodes, "
+        #     f"{structure['total_edges']} edges ({conditional_count} conditional)"
+        # )
 
     except Exception as e:
-        logger.debug(f"Failed to extract graph structure: {e}")
-        logger.debug(f"Traceback: {traceback.format_exc()}")
+        # logger.debug(f"Failed to extract graph structure: {e}")
+        # logger.debug(f"Traceback: {traceback.format_exc()}")
+        pass
 
     # Ensure all structure data is JSON-serializable
     try:
         structure = _ensure_json_serializable(structure)
-        logger.debug("Graph structure is JSON-serializable")
+        # logger.debug("Graph structure is JSON-serializable")
     except Exception as serialization_error:
         logger.warning(f"Warning: Graph structure contains non-serializable data: {serialization_error}")
 

@@ -27,7 +27,7 @@ def capture_backend(monkeypatch):
     monkeypatch.setattr("gati.core.client.EventClient.send_events", capture_send_events)
 
     # Fresh init per test with small batch for immediate flush
-    observe.init(backend_url="http://localhost:8000", batch_size=1, flush_interval=0.01)
+    observe.init(name="test-agent", batch_size=1, flush_interval=0.01)
 
     yield captured
 

@@ -7,7 +7,7 @@ Usage:
     from gati import observe
 
     # Initialize - auto-instrumentation is enabled by default
-    observe.init(backend_url="http://localhost:8000")
+    observe.init(name="my_agent")
 
     # Use LangGraph normally - everything is tracked!
     from langgraph.graph import StateGraph

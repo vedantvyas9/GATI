@@ -1272,7 +1272,7 @@ def get_gati_callbacks() -> List[BaseCallbackHandler]:
         from langchain_openai import ChatOpenAI
         from gati import observe
 
-        observe.init(backend_url="http://localhost:8000")
+        observe.init(name="my_agent")
         llm = ChatOpenAI(model="gpt-3.5-turbo", callbacks=observe.get_callbacks())
         response = llm.invoke("Hello!")
 

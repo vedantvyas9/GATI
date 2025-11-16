@@ -22,7 +22,7 @@ class Observe:
         from langchain_openai import ChatOpenAI
 
         # Initialize - that's it! All LLM/agent calls are auto-tracked
-        observe.init(name="my_agent", backend_url="http://localhost:8000")
+        observe.init(name="my_agent")
 
         # Use LLMs normally - no callbacks parameter needed
         llm = ChatOpenAI(model="gpt-3.5-turbo")
@@ -42,7 +42,7 @@ class Observe:
         - Works with any LangChain component
 
     Manual mode (if auto-injection disabled):
-        observe.init(name="my_agent", backend_url="...", auto_inject=False)
+        observe.init(name="my_agent", auto_inject=False)
         llm = ChatOpenAI(callbacks=observe.get_callbacks())
     """
     
@@ -80,7 +80,6 @@ class Observe:
     def init(
         self,
         name: str,
-        backend_url: Optional[str] = None,
         auto_inject: bool = True,
         **config: Any
     ) -> None:
@@ -88,12 +87,15 @@ class Observe:
 
         Args:
             name: Name of the agent/application (REQUIRED)
-            backend_url: Backend server URL
             auto_inject: Automatically inject GATI callbacks into LangChain Runnables
                         (default: True). When enabled, LLMs and agents automatically
                         track their execution without requiring callbacks parameter.
             **config: Additional configuration options (api_key, environment,
                      batch_size, flush_interval, telemetry, etc.)
+
+        Note:
+            The backend URL is configured via the GATI_BACKEND_URL environment variable
+            or defaults to http://localhost:8000 (as configured in docker-compose).
 
         Raises:
             ValueError: If name is not provided or is empty
@@ -102,7 +104,7 @@ class Observe:
         if not name or not isinstance(name, str) or not name.strip():
             raise ValueError(
                 "The 'name' parameter is required and must be a non-empty string. "
-                "Usage: observe.init(name='my_agent', backend_url='http://localhost:8000')"
+                "Usage: observe.init(name='my_agent')"
             )
 
         # Get or create config instance
@@ -110,8 +112,6 @@ class Observe:
 
         # Update config with provided values
         update_kwargs: Dict[str, Any] = {}
-        if backend_url is not None:
-            update_kwargs['backend_url'] = backend_url
 
         # Set agent_name from the required name parameter
         update_kwargs['agent_name'] = name.strip()
@@ -243,7 +243,7 @@ class Observe:
                 "LangChain 1.0+ detected. Auto-instrumentation limited. Use callbacks parameter:\n"
                 "from gati import observe\n"
                 "from langchain_openai import ChatOpenAI\n\n"
-                "observe.init(backend_url=\"http://localhost:8000\")\n"
+                "observe.init(name=\"my_agent\")\n"
                 "llm = ChatOpenAI(model=\"gpt-3.5-turbo\", callbacks=observe.get_callbacks())"
             )
             log.warning(example)

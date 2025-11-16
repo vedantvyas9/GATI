@@ -8,7 +8,7 @@ Usage:
     from gati import observe
 
     # Initialize - auto-injection is enabled by default
-    observe.init(backend_url="http://localhost:8000")
+    observe.init(name="my_agent")
 
     # Use LangChain normally - everything is tracked!
     from langchain_openai import ChatOpenAI

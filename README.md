@@ -115,7 +115,7 @@ uvicorn app.main:app --reload --port 8000
 from gati import observe
 
 # Initialize once at the start of your application
-observe.init(backend_url="http://localhost:8000")
+observe.init(name="my_agent")
 
 # Your existing LangChain code works automatically!
 from langchain.chat_models import ChatOpenAI
@@ -135,7 +135,7 @@ result = chain.invoke({"topic": "programming"})
 from gati import observe
 from langgraph.graph import StateGraph
 
-observe.init(backend_url="http://localhost:8000")
+observe.init(name="my_agent")
 
 # Your LangGraph code is automatically instrumented
 graph = StateGraph(AgentState)
@@ -153,7 +153,7 @@ result = app.invoke(initial_state)
 from gati import observe
 from gati.decorators import track_agent, track_tool
 
-observe.init(backend_url="http://localhost:8000")
+observe.init(name="my_agent")
 
 @track_agent(name="MyAgent")
 def my_agent(query: str):
