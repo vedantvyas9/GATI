@@ -31,6 +31,10 @@ def _track_sync_agent(
     """
     # Get agent name
     name = agent_name or func.__name__
+    try:
+        observe.record_agent_for_telemetry(name)
+    except Exception:
+        pass
 
     # Generate run_id and run_name
     run_id = generate_run_id(agent_name=name)
@@ -147,6 +151,10 @@ async def _track_async_agent(
     """
     # Get agent name
     name = agent_name or func.__name__
+    try:
+        observe.record_agent_for_telemetry(name)
+    except Exception:
+        pass
 
     # Generate run_id and run_name
     run_id = generate_run_id(agent_name=name)

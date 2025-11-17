@@ -4,12 +4,15 @@
   "description": "GATI SDK Telemetry Backend",
   "main": "api/metrics.js",
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "vercel dev",
+    "build": "node build-dashboard.js",
+    "build:dashboard": "node build-dashboard.js"
   },
   "dependencies": {
     "pg": "^8.11.3"
   },
   "devDependencies": {
+    "fs-extra": "^11.3.2",
     "vercel": "^32.0.0"
   }
 }

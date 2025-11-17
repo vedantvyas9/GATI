@@ -31,6 +31,11 @@ class FrameworkDetector:
                 detected.append("langgraph")
         except Exception:
             pass
+        try:
+            if "awsstrands" in sys.modules or "aws_strands" in sys.modules or "strands" in sys.modules:
+                detected.append("aws_strands")
+        except Exception:
+            pass
 
         if hasattr(self._log, "info"):
             self._log.info(f"Detected frameworks: {detected}")
@@ -99,6 +104,12 @@ class FrameworkDetector:
                         self._log.warning("Failed to instrument: langgraph (module not found)")
                     success = False
                 results["langgraph"] = success
+                continue
+
+            if fw == "aws_strands":
+                results[fw] = False
+                if hasattr(self._log, "warning"):
+                    self._log.warning("Failed to instrument: aws_strands (not supported yet)")
                 continue
 
             # Unknown framework – mark as failed but continue

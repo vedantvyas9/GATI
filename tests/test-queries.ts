@@ -1,5 +1,5 @@
-import { initializeDatabase, closeDatabase } from './src/database/connection.js';
-import { listAgents } from './src/database/queries.js';
+import { initializeDatabase, closeDatabase } from '../mcp-server/src/database/connection.js';
+import { listAgents } from '../mcp-server/src/database/queries.js';
 
 // Set database path
 process.env.DATABASE_PATH = '/Users/vedantvyas/Desktop/GATI/gati-sdk/backend/gati.db';

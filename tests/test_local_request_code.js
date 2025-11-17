@@ -6,7 +6,7 @@ process.env.POSTGRES_URL = 'postgres://user:pass@localhost:5432/testdb';
 // Load environment variables from .env
 require('dotenv').config();
 
-const handler = require('./telemetry-backend/api/auth/request-code.js');
+const handler = require('../telemetry-backend/api/auth/request-code.js');
 
 // Mock request and response objects
 const mockRequest = {

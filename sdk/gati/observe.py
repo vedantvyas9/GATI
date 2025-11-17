@@ -2,13 +2,15 @@
 import logging
 import threading
 import atexit
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Iterable
 
 from gati.core.config import Config
 from gati.core.buffer import EventBuffer
 from gati.core.client import EventClient
 from gati.core.event import Event
+from gati.core.telemetry import TelemetryClient
 from gati.instrumentation.detector import FrameworkDetector
+from gati.version import __version__ as SDK_VERSION
 
 
 class Observe:
@@ -70,6 +72,7 @@ class Observe:
         self._instrumented_frameworks: Dict[str, bool] = {}
         self._instrumentation_status: Dict[str, Any] = {}
         self._initialized = False
+        self._telemetry: Optional[TelemetryClient] = None
         self._global_run_id: Optional[str] = None
         self._global_run_name: Optional[str] = None
         self._agent_name: Optional[str] = None
@@ -132,6 +135,26 @@ class Observe:
         # Update config
         if update_kwargs:
             self._config.update(**update_kwargs)
+
+        # Initialize telemetry client if enabled
+        if self._config.telemetry:
+            if self._telemetry is None:
+                try:
+                    self._telemetry = TelemetryClient(
+                        enabled=True,
+                        sdk_version=SDK_VERSION,
+                    )
+                except Exception as exc:
+                    logging.getLogger("gati").debug(f"Failed to initialize telemetry: {exc}")
+                    self._telemetry = None
+            self.record_agent_for_telemetry(name.strip())
+        elif self._telemetry:
+            try:
+                self._telemetry.disable()
+            except Exception as exc:
+                logging.getLogger("gati").debug(f"Failed to disable telemetry: {exc}")
+            finally:
+                self._telemetry = None
 
         # Initialize client
         self._client = EventClient(
@@ -232,7 +255,9 @@ class Observe:
         
         # Detect what's present so we can tailor messages (esp. LangChain)
         detected = detector.detect_frameworks()
+        self._track_frameworks_for_telemetry(detected)
         results = detector.instrument_all(frameworks_to_try)
+        self._track_frameworks_for_telemetry([fw for fw, success in results.items() if success])
         
         # Log results
         log = logging.getLogger("gati")
@@ -292,6 +317,12 @@ class Observe:
 
         if self._buffer is None:
             raise RuntimeError("Event buffer not initialized.")
+
+        if self._telemetry:
+            try:
+                self._telemetry.track_event()
+            except Exception as exc:
+                logging.getLogger("gati").debug(f"Telemetry event tracking failed: {exc}")
 
         # Set run_name from context if not already set
         from gati.core.context import get_current_run_name
@@ -373,6 +404,14 @@ class Observe:
         except Exception as e:
             logging.getLogger("gati").debug(f"Error closing client: {e}")
 
+        if self._telemetry:
+            try:
+                self._telemetry.stop()
+            except Exception as exc:
+                logging.getLogger("gati").debug(f"Error stopping telemetry: {exc}")
+            finally:
+                self._telemetry = None
+
         # Reset state
         self._buffer = None
         self._client = None
@@ -391,6 +430,27 @@ class Observe:
         """String representation of Observe instance."""
         status = "initialized" if self._initialized else "not initialized"
         return f"Observe({status})"
+
+    def _track_frameworks_for_telemetry(self, frameworks: Iterable[str]) -> None:
+        """Record detected or instrumented frameworks for telemetry."""
+        if not self._telemetry:
+            return
+
+        for framework in frameworks:
+            try:
+                self._telemetry.track_framework(framework)
+            except Exception as exc:
+                logging.getLogger("gati").debug(f"Telemetry framework tracking failed: {exc}")
+
+    def record_agent_for_telemetry(self, agent_name: Optional[str]) -> None:
+        """Expose agent tracking to decorators and instrumentation."""
+        if not self._telemetry or not agent_name:
+            return
+
+        try:
+            self._telemetry.track_named_agent(agent_name)
+        except Exception as exc:
+            logging.getLogger("gati").debug(f"Telemetry agent tracking failed: {exc}")
 
 
 # Global singleton instance for easy access

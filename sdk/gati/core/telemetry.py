@@ -1,161 +1,140 @@
-"""Anonymous telemetry system for GATI SDK.
+"""Anonymous, asynchronous telemetry system for the GATI SDK.
 
-This module collects anonymous usage statistics to help improve the SDK.
-No sensitive data (prompts, completions, API keys, or PII) is ever collected.
-
-Telemetry is OPT-IN by default and can be disabled by setting:
-    observe.init(name="my_agent", telemetry=False)
-
-Data collected:
-- SDK version
-- Installation ID (anonymous UUID generated on first run)
-- Frameworks detected (langchain, langgraph, custom)
-- Total number of agents tracked (counter)
-- Total number of events per day (counter)
-- Lifetime total number of events tracked (counter)
+Collects opt-in usage statistics to help improve the SDK. All metrics are stored
+locally, queued, and sent asynchronously so they never block user code. No
+prompts, completions, API keys, or additional PII are collected—only the fields
+documented in the user agreement (installation ID, SDK version, counts, and
+detected frameworks).
 """
+
+from __future__ import annotations
+
 import json
 import logging
 import os
+import sys
 import threading
-import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, Optional, Set
+from typing import Any, Dict, List, Optional, Set
+
 import requests
 
 
 class TelemetryClient:
-    """Client for sending anonymous telemetry data."""
+    """Non-blocking client that queues and sends telemetry metrics asynchronously."""
 
-    # Default telemetry endpoint
-    # Can be overridden with GATI_TELEMETRY_URL environment variable
-    # Protected by rate limiting on the server side
     DEFAULT_ENDPOINT = os.getenv(
-        "GATI_TELEMETRY_URL",
-        "https://gati-mvp-telemetry.vercel.app/api/metrics"
+        "GATI_TELEMETRY_URL", "https://gati-mvp-telemetry.vercel.app/api/metrics"
     )
+    MAX_QUEUE_SIZE = 250
+    MAX_BACKOFF_SECONDS = 30 * 60  # 30 minutes
 
     def __init__(
-        self,
-        enabled: bool = True,
-        endpoint: Optional[str] = None,
-        sdk_version: str = "0.1.0"
-    ):
-        """Initialize telemetry client.
-
-        Args:
-            enabled: Whether telemetry is enabled (default: True, opt-in)
-            endpoint: Custom telemetry endpoint URL
-            sdk_version: SDK version string
-        """
+        self, enabled: bool = True, endpoint: Optional[str] = None, sdk_version: str = "0.1.0"
+    ) -> None:
         self.enabled = enabled
         self.endpoint = endpoint or self.DEFAULT_ENDPOINT
         self.sdk_version = sdk_version
         self.logger = logging.getLogger("gati.telemetry")
 
-        # Get or create installation ID
         self.installation_id = self._get_or_create_installation_id()
-
-        # Metrics storage
         self._lock = threading.Lock()
         self._metrics: Dict[str, Any] = {
-            "agents_tracked": 0,
             "events_today": 0,
             "lifetime_events": 0,
             "mcp_queries": 0,
             "frameworks_detected": set(),
-            "last_reset_date": datetime.now().date().isoformat()
+            "last_reset_date": datetime.now().date().isoformat(),
         }
+        self._tracked_agents: Set[str] = set()
+        self._legacy_agent_count = 0
 
-        # Load persisted metrics
-        self._load_metrics()
+        self._queue_file = self._get_config_dir() / "telemetry_queue.json"
+        self._queue_lock = threading.Lock()
+        self._queue_event = threading.Event()
+        self._queue_drained = threading.Event()
+        self._queue: List[Dict[str, Any]] = []
 
-        # Background sender thread
         self._stop_event = threading.Event()
+        self._scheduler_thread: Optional[threading.Thread] = None
         self._sender_thread: Optional[threading.Thread] = None
+        self.send_interval = 60 * 60  # one hour
 
-        # Send interval (1 hour)
-        self.send_interval = 1 * 60 * 60  # 1 hour in seconds
+        self._load_metrics()
+        self._load_queue()
+        self._update_queue_state_locked()
 
         if self.enabled:
-            self._start_sender()
+            self._start_threads()
+
+    # -------------------------------------------------------------------------
+    # Persistence helpers
+    # -------------------------------------------------------------------------
 
     def _get_or_create_installation_id(self) -> str:
-        """Get or create a unique installation ID.
-
-        This ID is stored locally and persists across sessions.
-        It's a random UUID and contains no user-identifiable information.
-        """
+        """Get or create a unique installation ID."""
         config_dir = self._get_config_dir()
         id_file = config_dir / ".gati_id"
 
         if id_file.exists():
             try:
                 return id_file.read_text().strip()
-            except Exception as e:
-                self.logger.debug(f"Failed to read installation ID: {e}")
+            except Exception as exc:
+                self.logger.debug(f"Failed to read installation ID: {exc}")
 
-        # Create new ID
         installation_id = str(uuid.uuid4())
-
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
             id_file.write_text(installation_id)
-        except Exception as e:
-            self.logger.debug(f"Failed to save installation ID: {e}")
-
+        except Exception as exc:
+            self.logger.debug(f"Failed to save installation ID: {exc}")
         return installation_id
 
     def _get_config_dir(self) -> Path:
-        """Get configuration directory for storing telemetry data."""
-        # Use user's home directory
-        home = Path.home()
-        return home / ".gati"
+        return Path.home() / ".gati"
 
     def _get_metrics_file(self) -> Path:
-        """Get path to metrics file."""
         return self._get_config_dir() / "metrics.json"
 
     def _load_metrics(self) -> None:
-        """Load persisted metrics from disk."""
         metrics_file = self._get_metrics_file()
-
         if not metrics_file.exists():
             return
 
         try:
-            with open(metrics_file, 'r') as f:
-                data = json.load(f)
+            with metrics_file.open("r") as file:
+                data = json.load(file)
+        except Exception as exc:
+            self.logger.debug(f"Failed to load metrics: {exc}")
+            return
 
-            with self._lock:
-                self._metrics["lifetime_events"] = data.get("lifetime_events", 0)
-                self._metrics["agents_tracked"] = data.get("agents_tracked", 0)
-                self._metrics["mcp_queries"] = data.get("mcp_queries", 0)
-                self._metrics["last_reset_date"] = data.get("last_reset_date", datetime.now().date().isoformat())
+        with self._lock:
+            self._metrics["lifetime_events"] = data.get("lifetime_events", 0)
+            self._metrics["mcp_queries"] = data.get("mcp_queries", 0)
+            self._metrics["last_reset_date"] = data.get(
+                "last_reset_date", datetime.now().date().isoformat()
+            )
+            frameworks = data.get("frameworks_detected", [])
+            self._metrics["frameworks_detected"] = set(frameworks)
 
-                # Convert frameworks list back to set
-                frameworks = data.get("frameworks_detected", [])
-                self._metrics["frameworks_detected"] = set(frameworks)
+            tracked_agents = data.get("tracked_agents") or []
+            if isinstance(tracked_agents, list):
+                self._tracked_agents = set(tracked_agents)
+            self._legacy_agent_count = max(
+                data.get("agents_tracked", len(self._tracked_agents)),
+                len(self._tracked_agents),
+            )
 
-                # Check if we need to reset daily counter
-                last_reset = datetime.fromisoformat(self._metrics["last_reset_date"]).date()
+            self._reset_daily_counters_if_needed_locked()
+            if data.get("events_today") is not None:
                 today = datetime.now().date()
-
-                if last_reset < today:
-                    # New day - reset daily counter
-                    self._metrics["events_today"] = 0
-                    self._metrics["last_reset_date"] = today.isoformat()
-                else:
-                    # Same day - load previous counter
+                last_reset = datetime.fromisoformat(self._metrics["last_reset_date"]).date()
+                if last_reset == today:
                     self._metrics["events_today"] = data.get("events_today", 0)
 
-        except Exception as e:
-            self.logger.debug(f"Failed to load metrics: {e}")
-
     def _save_metrics(self) -> None:
-        """Persist metrics to disk."""
         metrics_file = self._get_metrics_file()
 
         try:
@@ -165,204 +144,389 @@ class TelemetryClient:
             with self._lock:
                 data = {
                     "lifetime_events": self._metrics["lifetime_events"],
-                    "agents_tracked": self._metrics["agents_tracked"],
                     "events_today": self._metrics["events_today"],
                     "mcp_queries": self._metrics["mcp_queries"],
                     "frameworks_detected": list(self._metrics["frameworks_detected"]),
-                    "last_reset_date": self._metrics["last_reset_date"]
+                    "last_reset_date": self._metrics["last_reset_date"],
+                    "tracked_agents": sorted(self._tracked_agents),
+                    "agents_tracked": max(len(self._tracked_agents), self._legacy_agent_count),
                 }
 
-            with open(metrics_file, 'w') as f:
-                json.dump(data, f, indent=2)
+            with metrics_file.open("w") as file:
+                json.dump(data, file, indent=2)
+        except Exception as exc:
+            self.logger.debug(f"Failed to save metrics: {exc}")
 
-        except Exception as e:
-            self.logger.debug(f"Failed to save metrics: {e}")
+    def _reset_daily_counters_if_needed_locked(self) -> None:
+        last_reset = datetime.fromisoformat(self._metrics["last_reset_date"]).date()
+        today = datetime.now().date()
+
+        if last_reset < today:
+            self._metrics["events_today"] = 0
+            self._metrics["last_reset_date"] = today.isoformat()
+
+    def _load_queue(self) -> None:
+        if not self._queue_file.exists():
+            self._queue = []
+            return
+
+        try:
+            with self._queue_file.open("r") as file:
+                raw_entries = json.load(file)
+        except Exception as exc:
+            self.logger.debug(f"Failed to load telemetry queue: {exc}")
+            self._queue = []
+            return
+
+        loaded: List[Dict[str, Any]] = []
+        for entry in raw_entries:
+            try:
+                loaded.append(
+                    {
+                        "payload": entry["payload"],
+                        "attempts": entry.get("attempts", 0),
+                        "next_attempt_at": datetime.fromisoformat(entry["next_attempt_at"]),
+                    }
+                )
+            except Exception:
+                continue
+
+        self._queue = loaded
+
+    def _persist_queue_locked(self) -> None:
+        try:
+            self._queue_file.parent.mkdir(parents=True, exist_ok=True)
+            serialized = [
+                {
+                    "payload": entry["payload"],
+                    "attempts": entry["attempts"],
+                    "next_attempt_at": entry["next_attempt_at"].isoformat(),
+                }
+                for entry in self._queue
+            ]
+            with self._queue_file.open("w") as file:
+                json.dump(serialized, file, indent=2)
+        except Exception as exc:
+            self.logger.debug(f"Failed to persist telemetry queue: {exc}")
+
+    def _update_queue_state_locked(self) -> None:
+        with self._queue_lock:
+            if self._queue:
+                self._queue_drained.clear()
+            else:
+                self._queue_drained.set()
+            self._persist_queue_locked()
+
+    # -------------------------------------------------------------------------
+    # Public counters
+    # -------------------------------------------------------------------------
 
     def track_agent(self) -> None:
-        """Increment agent tracked counter."""
+        self.track_named_agent(None)
+
+    def track_named_agent(self, agent_name: Optional[str]) -> None:
         if not self.enabled:
             return
 
         with self._lock:
-            self._metrics["agents_tracked"] += 1
+            if agent_name:
+                self._tracked_agents.add(agent_name)
+                self._legacy_agent_count = max(self._legacy_agent_count, len(self._tracked_agents))
+            else:
+                self._legacy_agent_count = max(
+                    self._legacy_agent_count + 1, len(self._tracked_agents)
+                )
 
-        # Save immediately
         self._save_metrics()
 
     def track_event(self) -> None:
-        """Increment event counters."""
         if not self.enabled:
             return
 
         with self._lock:
-            # Check if we need to reset daily counter
-            last_reset = datetime.fromisoformat(self._metrics["last_reset_date"]).date()
-            today = datetime.now().date()
-
-            if last_reset < today:
-                # New day - reset daily counter
-                self._metrics["events_today"] = 0
-                self._metrics["last_reset_date"] = today.isoformat()
-
+            self._reset_daily_counters_if_needed_locked()
             self._metrics["events_today"] += 1
             self._metrics["lifetime_events"] += 1
+            lifetime = self._metrics["lifetime_events"]
 
-        # Save periodically (every 100 events to reduce I/O)
-        if self._metrics["lifetime_events"] % 100 == 0:
+        if lifetime % 100 == 0:
             self._save_metrics()
 
     def track_framework(self, framework: str) -> None:
-        """Track a detected framework.
-
-        Args:
-            framework: Framework name (e.g., "langchain", "langgraph", "custom")
-        """
         if not self.enabled:
             return
 
         with self._lock:
             self._metrics["frameworks_detected"].add(framework)
 
-        # Save immediately
         self._save_metrics()
 
     def track_mcp_query(self) -> None:
-        """Increment MCP query counter."""
         if not self.enabled:
             return
 
         with self._lock:
             self._metrics["mcp_queries"] += 1
+            mcp_total = self._metrics["mcp_queries"]
 
-        # Save periodically (every 100 queries to reduce I/O)
-        if self._metrics["mcp_queries"] % 100 == 0:
+        if mcp_total % 100 == 0:
             self._save_metrics()
 
-    def get_metrics(self) -> Dict[str, Any]:
-        """Get current metrics snapshot.
+    # -------------------------------------------------------------------------
+    # Metrics snapshot + framework detection
+    # -------------------------------------------------------------------------
 
-        Returns:
-            Dictionary with current metrics
-        """
+    def get_metrics(self) -> Dict[str, Any]:
+        auto_detected = self._auto_detect_frameworks()
         with self._lock:
-            return {
+            self._reset_daily_counters_if_needed_locked()
+            frameworks = set(self._metrics["frameworks_detected"])
+            if auto_detected:
+                frameworks |= auto_detected
+                self._metrics["frameworks_detected"] = frameworks
+
+            metrics = {
                 "installation_id": self.installation_id,
                 "sdk_version": self.sdk_version,
-                "agents_tracked": self._metrics["agents_tracked"],
+                "agents_tracked": max(len(self._tracked_agents), self._legacy_agent_count),
                 "events_today": self._metrics["events_today"],
                 "lifetime_events": self._metrics["lifetime_events"],
                 "mcp_queries": self._metrics["mcp_queries"],
-                "frameworks_detected": list(self._metrics["frameworks_detected"]),
-                "timestamp": datetime.now().isoformat()
+                "frameworks_detected": sorted(frameworks),
+                "timestamp": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                "user_email": self._get_user_email(),
             }
 
+        return metrics
+
+    def _auto_detect_frameworks(self) -> Set[str]:
+        detected: Set[str] = set()
+        modules = sys.modules
+
+        try:
+            if "langchain" in modules or "langchain_core" in modules:
+                detected.add("langchain")
+        except Exception:
+            pass
+
+        try:
+            if "langgraph" in modules:
+                detected.add("langgraph")
+        except Exception:
+            pass
+
+        try:
+            if "awsstrands" in modules or "aws_strands" in modules or "strands" in modules:
+                detected.add("aws_strands")
+        except Exception:
+            pass
+
+        return detected
+
+    # -------------------------------------------------------------------------
+    # Auth helpers
+    # -------------------------------------------------------------------------
+
     def _get_api_token(self) -> Optional[str]:
-        """Get API token from ~/.gati/.auth_token."""
         token_file = Path.home() / ".gati" / ".auth_token"
         if token_file.exists():
             try:
                 return token_file.read_text().strip()
-            except Exception as e:
-                self.logger.debug(f"Failed to read API token: {e}")
+            except Exception as exc:
+                self.logger.debug(f"Failed to read API token: {exc}")
         return None
 
+    def _get_user_email(self) -> Optional[str]:
+        email_file = Path.home() / ".gati" / ".auth_email"
+        if email_file.exists():
+            try:
+                return email_file.read_text().strip()
+            except Exception as exc:
+                self.logger.debug(f"Failed to read email: {exc}")
+        return None
+
+    # -------------------------------------------------------------------------
+    # Queue + network plumbing
+    # -------------------------------------------------------------------------
+
     def _send_metrics(self) -> None:
-        """Send metrics to telemetry endpoint."""
         if not self.enabled:
             return
+        self._enqueue_payload(self.get_metrics(), priority=False)
 
-        # Get API token
+    def _enqueue_payload(self, payload: Dict[str, Any], priority: bool) -> None:
+        entry = {
+            "payload": payload,
+            "attempts": 0,
+            "next_attempt_at": datetime.utcnow(),
+        }
+
+        with self._queue_lock:
+            if priority:
+                self._queue.insert(0, entry)
+            else:
+                self._queue.append(entry)
+
+            if len(self._queue) > self.MAX_QUEUE_SIZE:
+                dropped = self._queue.pop(0)
+                self.logger.debug(
+                    "Telemetry queue full; dropping payload with timestamp %s",
+                    dropped["payload"].get("timestamp"),
+                )
+
+            self._persist_queue_locked()
+            self._queue_drained.clear()
+
+        self._queue_event.set()
+
+    def _transmit_payload(self, payload: Dict[str, Any]) -> bool:
         api_token = self._get_api_token()
         if not api_token:
-            self.logger.debug("No API token found. Please authenticate with 'gati auth'")
-            return
+            self.logger.debug("Telemetry skipped: user not authenticated (no API token)")
+            return False
 
         try:
-            metrics = self.get_metrics()
-
-            # Send to telemetry endpoint with auth token
             response = requests.post(
                 self.endpoint,
-                json=metrics,
+                json=payload,
                 timeout=5.0,
                 headers={
                     "Content-Type": "application/json",
                     "User-Agent": f"gati-sdk/{self.sdk_version}",
-                    "X-API-Key": api_token
-                }
+                    "X-API-Key": api_token,
+                },
             )
-
-            if response.status_code in (200, 201, 204):
-                self.logger.debug(f"Telemetry sent successfully")
-            else:
-                self.logger.debug(f"Telemetry endpoint returned {response.status_code}")
-
         except requests.exceptions.Timeout:
             self.logger.debug("Telemetry request timed out")
+            return False
         except requests.exceptions.ConnectionError:
             self.logger.debug("Failed to connect to telemetry endpoint")
-        except Exception as e:
-            self.logger.debug(f"Failed to send telemetry: {e}")
+            return False
+        except Exception as exc:
+            self.logger.debug(f"Failed to send telemetry: {exc}")
+            return False
+
+        if response.status_code in (200, 201, 204):
+            self.logger.debug("Telemetry sent successfully")
+            return True
+
+        self.logger.debug("Telemetry endpoint returned %s: %s", response.status_code, response.text)
+        return False
 
     def _sender_worker(self) -> None:
-        """Background worker that sends metrics every 1 hour."""
-        while not self._stop_event.is_set():
-            # Wait for 1 hour or until stop signal
-            self._stop_event.wait(timeout=self.send_interval)
+        while True:
+            entry = None
+            wait_seconds = None
 
-            if not self._stop_event.is_set():
-                self._send_metrics()
+            with self._queue_lock:
+                if self._queue:
+                    now = datetime.utcnow()
+                    ready_index = None
+                    next_wake = None
 
-    def _start_sender(self) -> None:
-        """Start background sender thread."""
-        if self._sender_thread is not None:
+                    for idx, candidate in enumerate(self._queue):
+                        if candidate["next_attempt_at"] <= now:
+                            ready_index = idx
+                            break
+                        if next_wake is None or candidate["next_attempt_at"] < next_wake:
+                            next_wake = candidate["next_attempt_at"]
+
+                    if ready_index is not None:
+                        entry = self._queue.pop(ready_index)
+                        self._persist_queue_locked()
+                        if not self._queue:
+                            self._queue_drained.set()
+                    else:
+                        if next_wake:
+                            wait_seconds = max((next_wake - now).total_seconds(), 0.5)
+                else:
+                    self._queue_drained.set()
+
+            if entry:
+                success = self._transmit_payload(entry["payload"])
+                if not success:
+                    entry["attempts"] += 1
+                    delay = min(self.MAX_BACKOFF_SECONDS, 2 ** entry["attempts"])
+                    entry["next_attempt_at"] = datetime.utcnow() + timedelta(seconds=delay)
+                    with self._queue_lock:
+                        self._queue.append(entry)
+                        self._persist_queue_locked()
+                        self._queue_drained.clear()
+                continue
+
+            if self._stop_event.is_set():
+                if self._queue_drained.is_set():
+                    break
+
+            wait_for = wait_seconds or 30.0
+            self._queue_event.wait(timeout=wait_for)
+            self._queue_event.clear()
+
+    def _scheduler_worker(self) -> None:
+        if self._stop_event.wait(timeout=60):
             return
+        self._send_metrics()
 
-        self._sender_thread = threading.Thread(
-            target=self._sender_worker,
-            daemon=True,
-            name="gati-telemetry-sender"
-        )
-        self._sender_thread.start()
+        while not self._stop_event.is_set():
+            if self._stop_event.wait(timeout=self.send_interval):
+                break
+            self._send_metrics()
 
-        # Also send immediately on first start (or after 1 minute to not delay startup)
-        def delayed_send():
-            time.sleep(60)  # Wait 1 minute
-            if not self._stop_event.is_set():
-                self._send_metrics()
+    def _start_threads(self) -> None:
+        if self._sender_thread is None:
+            self._sender_thread = threading.Thread(
+                target=self._sender_worker, daemon=True, name="gati-telemetry-sender"
+            )
+            self._sender_thread.start()
 
-        initial_sender = threading.Thread(target=delayed_send, daemon=True)
-        initial_sender.start()
+        if self._scheduler_thread is None:
+            self._scheduler_thread = threading.Thread(
+                target=self._scheduler_worker, daemon=True, name="gati-telemetry-scheduler"
+            )
+            self._scheduler_thread.start()
+
+    # -------------------------------------------------------------------------
+    # Lifecycle helpers
+    # -------------------------------------------------------------------------
 
     def stop(self) -> None:
-        """Stop telemetry client and flush metrics."""
         if not self.enabled:
             return
 
-        # Signal stop
-        self._stop_event.set()
+        self._enqueue_payload(self.get_metrics(), priority=True)
+        self._queue_event.set()
+        self._queue_drained.wait(timeout=5.0)
 
-        # Wait for sender thread to stop (max 5 seconds)
+        self._stop_event.set()
+        self._queue_event.set()
+
+        if self._scheduler_thread is not None:
+            self._scheduler_thread.join(timeout=5.0)
         if self._sender_thread is not None:
             self._sender_thread.join(timeout=5.0)
 
-        # Save final metrics
         self._save_metrics()
 
-        # Send final metrics
-        self._send_metrics()
+    def flush(self) -> None:
+        if not self.enabled:
+            return
+        self._enqueue_payload(self.get_metrics(), priority=True)
+        self._queue_event.set()
 
     def disable(self) -> None:
-        """Disable telemetry and clear all stored data."""
+        self.stop()
         self.enabled = False
 
-        # Clear metrics file
         metrics_file = self._get_metrics_file()
         if metrics_file.exists():
             try:
                 metrics_file.unlink()
-            except Exception as e:
-                self.logger.debug(f"Failed to remove metrics file: {e}")
+            except Exception as exc:
+                self.logger.debug(f"Failed to remove metrics file: {exc}")
 
-        # Stop sender
-        self.stop()
+        if self._queue_file.exists():
+            try:
+                self._queue_file.unlink()
+            except Exception as exc:
+                self.logger.debug(f"Failed to remove telemetry queue: {exc}")
+
