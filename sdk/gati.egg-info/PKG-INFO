@@ -17,30 +17,31 @@ Dynamic: author
 Dynamic: home-page
 Dynamic: requires-python
 
-# GATI SDK - Technical Deep Dive
+# GATI SDK
 
-**A comprehensive guide to understanding the GATI SDK's architecture, instrumentation mechanisms, and data flow.**
-
----
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Core System Components](#core-system-components)
-3. [Instrumentation Deep Dive](#instrumentation-deep-dive)
-   - [LangChain Instrumentation](#langchain-instrumentation)
-   - [LangGraph Instrumentation](#langgraph-instrumentation)
-   - [Custom Python Instrumentation](#custom-python-instrumentation)
-4. [Event System & Data Flow](#event-system--data-flow)
-5. [Context Management & Run Tracking](#context-management--run-tracking)
-6. [Buffering & Network Communication](#buffering--network-communication)
-7. [Class Structure Reference](#class-structure-reference)
+Python instrumentation library for tracking AI agent executions with minimal code changes.
 
 ---
 
-## Architecture Overview
+## Overview
 
-The GATI SDK is designed around **event-driven observability** for AI agent workflows. Think of it as a surveillance system that watches your agent execute, captures every important action (LLM calls, tool uses, state changes), packages them into structured events, and ships them to a backend for analysis.
+The GATI SDK automatically instruments your AI agent code to capture:
+
+- LLM calls (prompts, completions, models, costs)
+- Tool executions (inputs, outputs, durations)
+- Agent state transitions
+- Event hierarchies and execution traces
+- Token usage and API costs
+
+All data is sent to a local backend for visualization and analysis.
+
+---
+
+## Installation
+
+```bash
+pip install gati
+```
 
 ### High-Level Flow
 
@@ -159,6 +160,8 @@ What happens internally:
 5. Enables auto-injection for LangChain (if requested)
 6. Instruments LangGraph (if available)
 
+---
+
 ### 2. **Event System**
 
 **File:** `gati/core/event.py`
@@ -197,6 +200,8 @@ class Event:
 5. **Buffering:** Added to `EventBuffer`
 6. **Batching:** Grouped with other events
 7. **Transmission:** Sent to backend in batch
+
+---
 
 ### 3. **Context Manager**
 
@@ -276,6 +281,8 @@ AgentStartEvent (id: abc123)
 │   └── LLMCallEvent (parent: tool_event_id)
 └── AgentEndEvent (parent: abc123)
 ```
+
+---
 
 ### 4. **Event Buffer**
 
@@ -363,6 +370,8 @@ def _flush_locked(self):
 - **Non-blocking:** Background thread means user code never waits
 - **Reliability:** Lock ensures no events are lost to race conditions
 - **Graceful shutdown:** `stop()` method flushes remaining events before exit
+
+---
 
 ### 5. **HTTP Client**
 
@@ -822,6 +831,8 @@ From LangChain callbacks, we capture:
 - **Tool names** - from tool object
 - **Tool inputs/outputs** - serialized to JSON-safe format
 
+---
+
 ### LangGraph Instrumentation
 
 **File:** `gati/instrumentation/langgraph.py`
@@ -1097,6 +1108,8 @@ AgentStartEvent (graph_run_id)
 │   └── LLMCallEvent (model: "gpt-4")   # If node uses LLM
 └── AgentEndEvent (graph_run_id)
 ```
+
+---
 
 ### Custom Python Instrumentation
 
