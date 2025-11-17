@@ -76,8 +76,8 @@ class TelemetryClient:
         self._stop_event = threading.Event()
         self._sender_thread: Optional[threading.Thread] = None
 
-        # Send interval (24 hours)
-        self.send_interval = 24 * 60 * 60  # 24 hours in seconds
+        # Send interval (1 hour)
+        self.send_interval = 1 * 60 * 60  # 1 hour in seconds
 
         if self.enabled:
             self._start_sender()
@@ -305,9 +305,9 @@ class TelemetryClient:
             self.logger.debug(f"Failed to send telemetry: {e}")
 
     def _sender_worker(self) -> None:
-        """Background worker that sends metrics every 24 hours."""
+        """Background worker that sends metrics every 1 hour."""
         while not self._stop_event.is_set():
-            # Wait for 24 hours or until stop signal
+            # Wait for 1 hour or until stop signal
             self._stop_event.wait(timeout=self.send_interval)
 
             if not self._stop_event.is_set():
