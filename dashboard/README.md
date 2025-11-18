@@ -44,13 +44,15 @@ The dashboard provides a visual interface for:
 
 ## Installation
 
-### Using Docker (Recommended)
+### Using GATI CLI (Recommended)
+
+The dashboard is automatically started when you run:
 
 ```bash
-cd dashboard
-docker build -t gati-dashboard .
-docker run -p 3000:80 gati-dashboard
+gati start
 ```
+
+This serves the built dashboard on port 3000 (configurable).
 
 ### Manual Installation
 
@@ -178,11 +180,11 @@ npm run build
 
 See [nginx.conf](nginx.conf:1) for production server setup.
 
-### Docker Deployment
+### Using GATI CLI
 
 ```bash
-docker build -t gati-dashboard .
-docker run -p 3000:80 gati-dashboard
+# Start dashboard with gati CLI (serves built dist/ folder)
+gati start --dashboard-port 3000
 ```
 
 ### Static Hosting

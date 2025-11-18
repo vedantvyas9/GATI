@@ -12,9 +12,7 @@ CREATE TABLE public.gati_metrics (
   frameworks_detected TEXT NOT NULL,
   first_seen TIMESTAMP WITHOUT TIME ZONE NULL DEFAULT NOW(),
   last_updated TIMESTAMP WITHOUT TIME ZONE NULL DEFAULT NOW(),
-  CONSTRAINT gati_metrics_pkey PRIMARY KEY (installation_id),
-  CONSTRAINT fk_user_email FOREIGN KEY (user_email)
-    REFERENCES gati_users(email) ON DELETE SET NULL
+  CONSTRAINT gati_metrics_pkey PRIMARY KEY (installation_id)
 ) TABLESPACE pg_default;
 
 -- Indexes for gati_metrics

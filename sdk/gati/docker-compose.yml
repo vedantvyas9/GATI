@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   # FastAPI Backend
   backend:
     build:
-      context: https://github.com/gati-ai/gati-sdk.git#main:backend
+      context: https://github.com/vedantvyas9/gati.git#main:backend
       dockerfile: Dockerfile
     container_name: gati_backend
     environment:
@@ -30,7 +28,7 @@ services:
   # React Dashboard
   dashboard:
     build:
-      context: https://github.com/gati-ai/gati-sdk.git#main:dashboard
+      context: https://github.com/vedantvyas9/gati.git#main:dashboard
       dockerfile: Dockerfile
     container_name: gati_dashboard
     environment:
@@ -47,7 +45,7 @@ services:
   # MCP Server for Claude Desktop / GitHub Copilot
   mcp-server:
     build:
-      context: https://github.com/gati-ai/gati-sdk.git#main:mcp-server
+      context: https://github.com/vedantvyas9/gati.git#main:mcp-server
       dockerfile: Dockerfile
     container_name: gati_mcp_server
     environment:

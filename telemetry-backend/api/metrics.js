@@ -42,7 +42,7 @@ module.exports = async function handler(request, response) {
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   response.setHeader(
     'Access-Control-Allow-Headers',
-    'Content-Type, User-Agent, X-API-Key, Authorization'
+    'Content-Type, User-Agent'
   );
 
   // Handle preflight
@@ -55,32 +55,7 @@ module.exports = async function handler(request, response) {
     return response.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Verify API token (optional for anonymous telemetry)
-  const apiToken = request.headers['x-api-key'] || request.headers['authorization']?.replace('Bearer ', '');
-
-  // Validate token against database if provided
-  let userEmail = null;
-  if (apiToken) {
-    try {
-      const userResult = await pool.query(
-        'SELECT email FROM gati_users WHERE api_token = $1',
-        [apiToken]
-      );
-
-      if (userResult.rows.length === 0) {
-        return response.status(401).json({ error: 'Unauthorized - Invalid API token' });
-      }
-
-      userEmail = userResult.rows[0].email;
-
-      await pool.query('UPDATE gati_users SET last_active = NOW() WHERE api_token = $1', [
-        apiToken,
-      ]);
-    } catch (error) {
-      console.error('Token validation error:', error);
-      return response.status(500).json({ error: 'Authentication error' });
-    }
-  }
+  // No authentication required - all telemetry is anonymous
 
   try {
     const {
@@ -149,7 +124,8 @@ module.exports = async function handler(request, response) {
     }
 
     const frameworksJson = JSON.stringify(frameworks_detected);
-    const effectiveEmail = userEmail || user_email || null;
+    // user_email can be provided in request body (optional), but no auth validation
+    const effectiveEmail = user_email || null;
 
     await withTransaction(async (client) => {
       await client.query(

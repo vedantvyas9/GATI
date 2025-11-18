@@ -44,7 +44,7 @@ pip install gati
 Only needed if you want to view the dashboard or use MCP integration:
 
 ```bash
-# Start backend, dashboard, and MCP server
+# Start backend and dashboard as local processes
 gati start
 
 # Services will be available at:
@@ -52,7 +52,16 @@ gati start
 # - Dashboard: http://localhost:3000
 ```
 
-The first time you run `gati start`, Docker will build the services from GitHub (one-time setup, ~2-3 minutes).
+**Custom ports:**
+```bash
+# Use command-line arguments
+gati start --backend-port 8080 --dashboard-port 3001
+
+# Or set environment variables
+export GATI_BACKEND_PORT=8080
+export GATI_DASHBOARD_PORT=3001
+gati start
+```
 
 **Stop services when done:**
 ```bash
@@ -165,77 +174,73 @@ The Model Context Protocol (MCP) allows AI assistants to access your local trace
 
 ### Setup for Claude Desktop
 
+**Easy Setup (Recommended):**
+
 1. **Start the GATI services** (if not already running):
    ```bash
    gati start
    ```
 
-2. **Open your Claude Desktop configuration file**:
-   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-   - **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-3. **Add the GATI MCP server configuration**:
-   ```json
-   {
-     "mcpServers": {
-       "gati": {
-         "command": "docker",
-         "args": [
-           "exec",
-           "-i",
-           "gati_mcp_server",
-           "node",
-           "/app/dist/index.js"
-         ]
-       }
-     }
-   }
+2. **Run the setup command**:
+   ```bash
+   gati mcp setup claude --write-claude
    ```
+   
+   This automatically:
+   - Finds the MCP server path
+   - Updates your Claude Desktop configuration file
+   - Configures everything correctly
 
-4. **Restart Claude Desktop**
+3. **Restart Claude Desktop**
 
-5. **Start asking questions**:
+4. **Start asking questions**:
    - "Show me all my agent runs from today"
    - "What was the cost of the last run?"
    - "Compare the last 3 runs"
    - "Why was run X slow?"
    - "Which agent used the most tokens?"
 
+**Manual Setup (Alternative):**
+
+If you prefer to set it up manually:
+```bash
+gati mcp setup claude
+```
+
+This will show you the exact configuration to copy into your Claude Desktop config file.
+
 ### Setup for GitHub Copilot (VS Code)
+
+**Easy Setup (Recommended):**
 
 1. **Start the GATI services**:
    ```bash
    gati start
    ```
 
-2. **Open your MCP server configuration file**:
-   - **VS Code**: `mcp.json` or `mcp_config.json` in your project root
-
-3. **Add the GATI MCP server configuration**:
-   ```json
-   {
-     "mcp.servers": {
-       "gati": {
-         "command": "docker",
-         "args": [
-           "exec",
-           "-i",
-           "gati_mcp_server",
-           "node",
-           "/app/dist/index.js"
-         ]
-       }
-     }
-   }
+2. **Run the setup command**:
+   ```bash
+   gati mcp setup
    ```
+   
+   This automatically:
+   - Finds the MCP server path
+   - Creates `mcp.json` in your current directory
+   - Configures everything correctly
 
-4. **Save and reload** your client's MCP extension or plugin
+3. **Reload VS Code**:
+   - Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
+   - Type "Developer: Reload Window"
+   - Or simply restart VS Code
 
-5. **Ask Copilot about your traces**:
+4. **Start using it!**:
    - Type in chat: "@gati show me all agent runs"
    - "@gati what was the average cost today?"
    - "@gati find runs with errors"
+
+**Manual Setup (Alternative):**
+
+If you prefer to set it up manually, the `gati mcp setup` command will show you the exact configuration needed.
 
 ### MCP Server Features
 
@@ -266,7 +271,7 @@ All development traces remain on your machine:
 - Your code and business logic
 - Cost and token usage details
 
-**Storage:** Local SQLite database in Docker volume `gati_data:/app/data/gati.db`
+**Storage:** Local SQLite database at `~/.gati/data/gati.db`
 
 ### Anonymous Usage Metrics
 
@@ -310,23 +315,31 @@ observe.init(name="my_agent", telemetry=False)
 ## CLI Commands
 
 ```bash
-# Start local services (backend, dashboard, MCP server)
-gati start              # Run in background (detached mode)
-gati start -f           # Run in foreground with logs visible
+# Start local services (backend, dashboard)
+gati start                          # Run in background (detached mode)
+gati start -f                       # Run in foreground with logs visible
+gati start --backend-port 8080      # Custom backend port
+gati start --dashboard-port 3001    # Custom dashboard port
+
+# MCP Server Setup (Easy onboarding!)
+gati mcp setup                      # Set up for VS Code (creates mcp.json)
+gati mcp setup claude               # Show Claude Desktop config
+gati mcp setup claude --write-claude # Auto-update Claude Desktop config
+gati mcp setup both                 # Set up for both VS Code and Claude
 
 # Stop services
-gati stop               # Stop all containers
+gati stop                           # Stop all services
 
 # Check status
-gati status             # Show running services
+gati status                         # Show running services
 
 # View logs
-gati logs               # Show all logs
-gati logs -f            # Follow logs (live tail)
-gati logs -f backend    # Follow specific service logs
+gati logs                           # Show all logs
+gati logs -f                        # Follow logs (live tail)
+gati logs -f backend                # Follow specific service logs
 
 # Help
-gati --help             # Show all commands
+gati --help                         # Show all commands
 ```
 
 ---
@@ -336,14 +349,14 @@ gati --help             # Show all commands
 ### Environment Variables
 
 ```bash
-# Backend URL (default: http://localhost:8000)
-export GATI_BACKEND_URL=http://localhost:8000
+# Service ports (for gati start command)
+export GATI_BACKEND_PORT=8080          # Backend port (default: 8000)
+export GATI_DASHBOARD_PORT=3001        # Dashboard port (default: 3000)
 
-# Batch size for event sending (default: 10)
-export GATI_BATCH_SIZE=10
-
-# Flush interval in seconds (default: 1.0)
-export GATI_FLUSH_INTERVAL=1.0
+# SDK configuration
+export GATI_BACKEND_URL=http://localhost:8000  # Backend URL (default: http://localhost:8000)
+export GATI_BATCH_SIZE=10                      # Batch size for event sending (default: 10)
+export GATI_FLUSH_INTERVAL=1.0                 # Flush interval in seconds (default: 1.0)
 ```
 
 ### In Code Configuration
@@ -376,8 +389,9 @@ observe.init(
    - **MCP server (TypeScript)**: read-only layer on top of the same database for Claude/Copilot.
 
 3. **Storage footprint**
-   - SQLite DB lives in the Docker volume `gati_data:/app/data/gati.db`.
+   - SQLite DB stored at `~/.gati/data/gati.db`.
    - Telemetry counters stored at `~/.gati/metrics.json`.
+   - All services run as local processes (no Docker required).
 
 4. **Telemetry (optional & anonymous)**
    - Only installation UUID, SDK version, framework flags, and aggregate counts are sent to
@@ -440,18 +454,22 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
 
-### Docker Services Not Starting
+### Services Not Starting
 
 ```bash
-# Check Docker is running
-docker ps
+# Check if ports are available
+lsof -i :8000  # Check backend port
+lsof -i :3000  # Check dashboard port
 
 # View logs for errors
 gati logs
 
-# Rebuild containers (if needed)
-docker-compose down
-docker-compose up --build -d
+# Check service status
+gati status
+
+# Restart services
+gati stop
+gati start
 ```
 
 ### Dashboard Not Showing Data
@@ -464,14 +482,17 @@ docker-compose up --build -d
 ### MCP Server Not Connecting
 
 ```bash
-# Check MCP container is running
-docker ps | grep gati_mcp_server
+# Verify MCP server path is correct
+node /path/to/gati/mcp-server/dist/index.js
 
-# View MCP logs
-docker logs gati_mcp_server
+# Check database path is accessible
+ls ~/.gati/data/gati.db
 
-# Restart MCP server
-docker restart gati_mcp_server
+# Verify backend is running
+curl http://localhost:8000/health
+
+# Check MCP server logs (if running as service)
+gati logs mcp-server
 ```
 
 ### Telemetry Issues

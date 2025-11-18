@@ -110,13 +110,15 @@ CREATE INDEX idx_events_timestamp ON events(timestamp);
 
 ## Installation
 
-### Using Docker (Recommended)
+### Using GATI CLI (Recommended)
+
+The backend is automatically started when you run:
 
 ```bash
-cd backend
-docker build -t gati-backend .
-docker run -p 8000:8000 -v $(pwd)/gati.db:/app/gati.db gati-backend
+gati start
 ```
+
+This starts the backend as a local process on port 8000 (configurable).
 
 ### Manual Installation
 
@@ -126,12 +128,17 @@ cd backend
 # Install dependencies
 pip install -r requirements.txt
 
+# Set database path (optional, defaults to ./gati.db)
+export DATABASE_URL=sqlite+aiosqlite:///./gati.db
+
 # Run migrations
 alembic upgrade head
 
 # Start server
 uvicorn app.main:app --reload --port 8000
 ```
+
+**Note:** When using `gati start`, the database is automatically stored at `~/.gati/data/gati.db`.
 
 ---
 
@@ -142,7 +149,7 @@ uvicorn app.main:app --reload --port 8000
 Create a `.env` file:
 
 ```bash
-# Database
+# Database (defaults to ~/.gati/data/gati.db when using gati start)
 DATABASE_URL=sqlite+aiosqlite:///./gati.db
 
 # Server

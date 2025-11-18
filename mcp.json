@@ -1,0 +1,14 @@
+{
+  "mcp.servers": {
+    "gati": {
+      "command": "node",
+      "args": [
+        "/Users/vedantvyas/Desktop/GATI/gati-sdk/mcp-server/dist/index.js"
+      ],
+      "env": {
+        "DATABASE_PATH": "/Users/vedantvyas/.gati/data/gati.db",
+        "BACKEND_URL": "http://localhost:8000"
+      }
+    }
+  }
+}

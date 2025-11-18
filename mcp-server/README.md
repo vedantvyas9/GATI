@@ -31,69 +31,69 @@ The GATI MCP Server exposes your local trace data through a set of tools that AI
 
 ### Prerequisites
 
-- Docker installed
+- Node.js 18+ installed
 - GATI SDK installed and collecting traces
+- GATI backend running (via `gati start`)
 
 ### Setup
 
-1. Start the GATI services (including MCP server):
+**Easy Setup (Recommended):**
+
+1. **Start the GATI services**:
 
 ```bash
 gati start
 ```
 
-This starts the backend, dashboard, and MCP server via Docker.
+2. **Run the setup command**:
 
-2. Configure your AI assistant:
-
-**For Claude Desktop:**
-
-Open your Claude Desktop configuration file:
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-Add the GATI MCP server configuration:
-```json
-{
-  "mcpServers": {
-    "gati": {
-      "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "gati_mcp_server",
-        "node",
-        "/app/dist/index.js"
-      ]
-    }
-  }
-}
+For VS Code:
+```bash
+gati mcp setup
 ```
 
-**For VS Code with GitHub Copilot:**
-
-Open your MCP server configuration file (`mcp.json` or `mcp_config.json` in your project root) and add:
-```json
-{
-  "mcp.servers": {
-    "gati": {
-      "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "gati_mcp_server",
-        "node",
-        "/app/dist/index.js"
-      ]
-    }
-  }
-}
+For Claude Desktop:
+```bash
+gati mcp setup claude --write-claude
 ```
 
-3. Restart your AI assistant
+For both:
+```bash
+gati mcp setup both
+```
 
-4. Start querying your traces!
+This automatically:
+- Finds the MCP server path
+- Creates/updates the configuration files
+- Sets everything up correctly
+
+3. **Restart your AI assistant** (VS Code or Claude Desktop)
+
+4. **Start querying your traces!**
+
+**Manual Setup (Alternative):**
+
+If you prefer to set it up manually:
+
+1. **Start the GATI services**:
+```bash
+gati start
+```
+
+2. **Build the MCP server** (if not already built):
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+3. **Run the setup command to see the configuration**:
+```bash
+gati mcp setup claude  # Shows Claude Desktop config
+gati mcp setup vscode  # Creates mcp.json for VS Code
+```
+
+4. **Copy the configuration** to your AI assistant's config file
 
 ---
 
@@ -135,11 +135,13 @@ GATI Stack (via `gati start`):
 │  Backend (FastAPI)      │ ← Receives trace events
 │  SQLite Database        │ ← Stores trace data locally
 │  (localhost:8000)       │
+│  ~/.gati/data/gati.db   │
 └───────────┬─────────────┘
             │
 ┌───────────▼─────────────┐
 │  GATI MCP Server        │ ← Exposes traces via MCP
-│  (Docker container)     │ ← Reads from SQLite (read-only)
+│  (Node.js process)      │ ← Reads from SQLite (read-only)
+│  (stdio/stdout)         │
 └───────────┬─────────────┘
             │
 ┌───────────▼─────────────┐
@@ -153,9 +155,13 @@ GATI Stack (via `gati start`):
 
 ## Configuration
 
-The MCP server is automatically configured when you run `gati start`. It connects to the local SQLite database used by the GATI backend.
+The MCP server connects to the local SQLite database used by the GATI backend.
 
-The MCP server runs in a Docker container and has read-only access to the trace database.
+**Environment Variables:**
+- `DATABASE_PATH` - Path to SQLite database (default: `~/.gati/data/gati.db`)
+- `BACKEND_URL` - Backend API URL (default: `http://localhost:8000`)
+
+The MCP server reads from the same database as the backend but operates independently as a separate process.
 
 ---
 
@@ -169,9 +175,10 @@ cd mcp-server
 npm install
 ```
 
-2. Set database URL:
+2. Set environment variables:
 ```bash
-export DATABASE_URL="postgresql://gati_user:gati_password@localhost:5434/gati_db"
+export DATABASE_PATH="~/.gati/data/gati.db"
+export BACKEND_URL="http://localhost:8000"
 ```
 
 3. Run in development mode:
@@ -190,19 +197,25 @@ npm run build
 
 ### MCP server not connecting
 
-1. Check if services are running:
+1. Check if backend is running:
 ```bash
 gati status
+curl http://localhost:8000/health
 ```
 
-2. Check MCP server logs:
+2. Verify database path is correct:
+```bash
+ls ~/.gati/data/gati.db
+```
+
+3. Test MCP server manually:
+```bash
+node /path/to/gati/mcp-server/dist/index.js
+```
+
+4. Check MCP server logs (if running as service):
 ```bash
 gati logs mcp-server
-```
-
-3. Verify MCP container is running:
-```bash
-docker ps | grep gati_mcp_server
 ```
 
 ### Tools not appearing in AI assistant

@@ -1,17 +1,10 @@
 .gitignore
 LICENSE
 MANIFEST.in
-PACKAGING.md
 README.md
-docker-compose.yml
-init-db.sql.postgres-backup
 pyproject.toml
 reference_trace.png
 setup.py
-vercel_database_queries.sql
-.claude/settings.local.json
-.github/workflows/docker-build.yml
-.vscode/mcp.json
 backend/.dockerignore
 backend/Dockerfile
 backend/README.md
@@ -137,6 +130,8 @@ sdk/gati.egg-info/top_level.txt
 sdk/gati/cli/__init__.py
 sdk/gati/cli/auth.py
 sdk/gati/cli/main.py
+sdk/gati/cli/process_manager.py
+sdk/gati/cli/services.py
 sdk/gati/core/__init__.py
 sdk/gati/core/buffer.py
 sdk/gati/core/client.py

@@ -99,3 +99,17 @@ logs/
 
 # Supabase
 supabase/
+
+# Test virtual environments
+test_env/
+
+# Build artifacts
+dist/
+build/
+
+# Cache directories
+.pytest_cache/
+.vercel/
+
+# macOS
+.DS_Store
