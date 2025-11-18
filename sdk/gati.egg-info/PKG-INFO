@@ -2,14 +2,14 @@ Metadata-Version: 2.4
 Name: gati
 Version: 0.1.1
 Summary: Local-first observability for AI agents. Track LLM calls, tool usage, and agent state.
-Home-page: https://github.com/gati-ai/gati-sdk
-Author: GATI Team
-Author-email: GATI Team <support@gati.dev>
+Home-page: https://github.com/vedantvyas9/gati
+Author: Vedant Vyas
+Author-email: Vedant Vyas <vedant.p.vyas@gmail.com>
 License: MIT
-Project-URL: Homepage, https://github.com/gati-ai/gati-sdk
-Project-URL: Documentation, https://docs.gati.dev
-Project-URL: Repository, https://github.com/gati-ai/gati-sdk
-Project-URL: Issues, https://github.com/gati-ai/gati-sdk/issues
+Project-URL: Homepage, https://github.com/vedantvyas9/gati
+Project-URL: Documentation, https://github.com/vedantvyas9/gati#readme
+Project-URL: Repository, https://github.com/vedantvyas9/gati
+Project-URL: Issues, https://github.com/vedantvyas9/gati/issues
 Keywords: ai,agents,llm,observability,tracing,langchain,langgraph,monitoring,dashboard
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers

@@ -6,6 +6,7 @@ README.md
 docker-compose.yml
 init-db.sql.postgres-backup
 pyproject.toml
+reference_trace.png
 setup.py
 vercel_database_queries.sql
 .claude/settings.local.json

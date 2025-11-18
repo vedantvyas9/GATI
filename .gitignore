@@ -53,6 +53,10 @@ ENV/
 .project
 .pydevproject
 .settings/
+.claude/
+
+# GitHub
+.github/
 
 # OS
 .DS_Store

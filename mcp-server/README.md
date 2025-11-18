@@ -27,32 +27,68 @@ The GATI MCP Server exposes your local trace data through a set of tools that AI
 
 ---
 
-## Quick Start (Docker Compose)
+## Quick Start
 
 ### Prerequisites
 
-- Docker and Docker Compose installed
-- GATI SDK collecting traces to PostgreSQL
+- Docker installed
+- GATI SDK installed and collecting traces
 
 ### Setup
 
-1. Start the GATI stack (including MCP server):
+1. Start the GATI services (including MCP server):
 
 ```bash
-cd gati-sdk
-docker-compose up -d
+gati start
 ```
+
+This starts the backend, dashboard, and MCP server via Docker.
 
 2. Configure your AI assistant:
 
 **For Claude Desktop:**
-```bash
-./scripts/configure-claude-desktop.sh
+
+Open your Claude Desktop configuration file:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add the GATI MCP server configuration:
+```json
+{
+  "mcpServers": {
+    "gati": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "gati_mcp_server",
+        "node",
+        "/app/dist/index.js"
+      ]
+    }
+  }
+}
 ```
 
 **For VS Code with GitHub Copilot:**
-```bash
-./scripts/configure-copilot.sh
+
+Open your MCP server configuration file (`mcp.json` or `mcp_config.json` in your project root) and add:
+```json
+{
+  "mcp.servers": {
+    "gati": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "gati_mcp_server",
+        "node",
+        "/app/dist/index.js"
+      ]
+    }
+  }
+}
 ```
 
 3. Restart your AI assistant
@@ -94,20 +130,22 @@ Copilot: [Uses compare_runs tool]
 ## Architecture
 
 ```
-Docker Compose Stack:
+GATI Stack (via `gati start`):
 ┌─────────────────────────┐
-│  PostgreSQL             │ ← Stores trace data
-│  (port 5434)            │
+│  Backend (FastAPI)      │ ← Receives trace events
+│  SQLite Database        │ ← Stores trace data locally
+│  (localhost:8000)       │
 └───────────┬─────────────┘
             │
 ┌───────────▼─────────────┐
 │  GATI MCP Server        │ ← Exposes traces via MCP
-│  (stdio interface)      │
+│  (Docker container)     │ ← Reads from SQLite (read-only)
 └───────────┬─────────────┘
             │
 ┌───────────▼─────────────┐
 │  Claude Desktop /       │ ← AI assistant
-│  GitHub Copilot         │
+│  GitHub Copilot /       │
+│  Cursor                 │
 └─────────────────────────┘
 ```
 
@@ -115,14 +153,9 @@ Docker Compose Stack:
 
 ## Configuration
 
-The MCP server is configured via environment variables in docker-compose.yml:
+The MCP server is automatically configured when you run `gati start`. It connects to the local SQLite database used by the GATI backend.
 
-```yaml
-environment:
-  DATABASE_URL: postgresql://gati_user:gati_password@postgres:5432/gati_db
-  DATABASE_POOL_SIZE: 10
-  DATABASE_POOL_TIMEOUT: 30000
-```
+The MCP server runs in a Docker container and has read-only access to the trace database.
 
 ---
 
@@ -157,19 +190,19 @@ npm run build
 
 ### MCP server not connecting
 
-1. Check if containers are running:
+1. Check if services are running:
 ```bash
-docker-compose ps
+gati status
 ```
 
 2. Check MCP server logs:
 ```bash
-docker-compose logs mcp-server
+gati logs mcp-server
 ```
 
-3. Test database connection:
+3. Verify MCP container is running:
 ```bash
-docker-compose exec mcp-server node -e "console.log('Database URL:', process.env.DATABASE_URL)"
+docker ps | grep gati_mcp_server
 ```
 
 ### Tools not appearing in AI assistant
@@ -187,19 +220,24 @@ cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | grep gati
 
 ### No trace data showing up
 
-1. Verify PostgreSQL has data:
+1. Verify backend is receiving events:
 ```bash
-docker-compose exec postgres psql -U gati_user -d gati_db -c "SELECT COUNT(*) FROM agents;"
+curl http://localhost:8000/health
 ```
 
-2. Check that your SDK is configured to send to the correct backend:
+2. Check that your SDK is initialized correctly:
 ```python
-from gati import Observe
+from gati import observe
 
-observe = Observe.init(
-    backend_url="http://localhost:8000",  # Make sure this matches your setup
-    agent_name="my-agent"
+observe.init(
+    name="my_agent",
+    backend_url="http://localhost:8000"  # Default, can be omitted
 )
+```
+
+3. Verify events are being sent by checking backend logs:
+```bash
+gati logs backend
 ```
 
 ---

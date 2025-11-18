@@ -495,7 +495,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [Backend API Reference](backend/README.md)
 - [Dashboard Guide](dashboard/README.md)
 - [MCP Server Setup](mcp-server/README.md)
-- [Examples & Tutorials](demo/README.md)
 
 ---
 
