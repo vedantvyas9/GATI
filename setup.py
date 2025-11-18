@@ -1,22 +1,21 @@
 """
 GATI - Local-first observability for AI agents
 
-This setup.py packages the entire GATI stack including:
-- Python SDK
-- Backend API (FastAPI)
-- Dashboard (React)
-- Docker Compose configuration
+This setup.py packages the GATI SDK for tracking AI agent executions.
 
-When installed via pip, users get the SDK and can start the backend/dashboard
-using the `gati` CLI command or docker-compose.
+When installed via pip, users get:
+- Python SDK with @observe() decorator
+- Auto-instrumentation for LangChain/LangGraph
+- CLI tool for setup instructions
+- Anonymous telemetry (installation ID, event counts only)
+
+Dashboard requires cloning the GitHub repo and running docker-compose.
 """
 from setuptools import setup, find_packages
 from pathlib import Path
-import shutil
-
-# Read version from sdk/gati/version.py
 import re
 
+# Read version from sdk/gati/version.py
 version_file = Path(__file__).parent / "sdk" / "gati" / "version.py"
 version_content = version_file.read_text() if version_file.exists() else ""
 version_match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', version_content)
@@ -40,23 +39,28 @@ setup(
         "Source": "https://github.com/gati-ai/gati-sdk",
         "Tracker": "https://github.com/gati-ai/gati-sdk/issues",
     },
-    
-    # Package discovery
+
+    # Package discovery - find all packages in sdk/
     packages=find_packages(where="sdk"),
     package_dir={"": "sdk"},
 
-    # Include package data (py.typed)
+    # Include package data
     include_package_data=True,
-    
+    package_data={
+        "gati": [
+            "py.typed",
+        ],
+    },
+
     # Python version requirement
     python_requires=">=3.9",
-    
+
     # Core dependencies
     install_requires=[
         "requests>=2.31.0",
         "typing-extensions>=4.7.0",
     ],
-    
+
     # Optional dependencies
     extras_require={
         "dev": [
@@ -82,14 +86,14 @@ setup(
             "python-dotenv>=1.0.0",
         ],
     },
-    
+
     # CLI entry point
     entry_points={
         "console_scripts": [
             "gati=gati.cli.main:main",
         ],
     },
-    
+
     # PyPI classifiers
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -108,9 +112,9 @@ setup(
         "Framework :: FastAPI",
         "Framework :: AsyncIO",
     ],
-    
+
     keywords="ai agents llm observability tracing langchain langgraph monitoring dashboard",
     license="MIT",
-    
+
     zip_safe=False,
 )

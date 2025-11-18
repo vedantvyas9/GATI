@@ -1,12 +1,6 @@
 include README.md
 include LICENSE
-include PRODUCTION_READY.md
-include docker-compose.yml
-include init-db.sql
-include .env.example
-recursive-include docs *.md
-# Note: Backend and dashboard source code are NOT included.
-# Users will pull pre-built Docker images instead.
+include sdk/gati/py.typed
 global-exclude __pycache__
 global-exclude *.py[co]
 global-exclude node_modules

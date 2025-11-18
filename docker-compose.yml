@@ -1,78 +1,70 @@
 version: '3.8'
 
 services:
-  # FastAPI Backend (Production)
-  # Uses pre-built Docker image from Docker Hub
+  # FastAPI Backend
   backend:
-    image: gati/backend:latest
+    build:
+      context: https://github.com/gati-ai/gati-sdk.git#main:backend
+      dockerfile: Dockerfile
     container_name: gati_backend
     environment:
       DATABASE_URL: sqlite+aiosqlite:////app/data/gati.db
       DEBUG: "false"
       ENVIRONMENT: production
-      CORS_ORIGINS: "http://localhost:3000,http://localhost"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:80"
       API_HOST: "0.0.0.0"
       API_PORT: "8000"
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "8000:8000"
     volumes:
-      - sqlite_data:/app/data
+      - gati_data:/app/data
+    networks:
+      - gati_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Dashboard
+  dashboard:
+    build:
+      context: https://github.com/gati-ai/gati-sdk.git#main:dashboard
+      dockerfile: Dockerfile
+    container_name: gati_dashboard
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - gati_network
     restart: unless-stopped
 
   # MCP Server for Claude Desktop / GitHub Copilot
-  # Uses pre-built Docker image from Docker Hub
   mcp-server:
-    image: gati/mcp-server:latest
+    build:
+      context: https://github.com/gati-ai/gati-sdk.git#main:mcp-server
+      dockerfile: Dockerfile
     container_name: gati_mcp_server
     environment:
       DATABASE_PATH: /app/data/gati.db
+      BACKEND_URL: http://backend:8000
     volumes:
-      - sqlite_data:/app/data:ro  # Read-only access to SQLite database
+      - gati_data:/app/data:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - gati_network
     restart: unless-stopped
-    # MCP servers run via stdio, so no ports needed
-    # They're invoked directly by Claude Desktop / VS Code via docker exec
-
-  # React Dashboard (Production)
-  # Uses pre-built Docker image from Docker Hub
-  dashboard:
-    image: gati/dashboard:latest
-    container_name: gati_dashboard
-    ports:
-      - "${DASHBOARD_PORT:-80}:80"
-    depends_on:
-      - backend
-    networks:
-      - gati_network
-    restart: unless-stopped
-
-  # Nginx reverse proxy and static file server
-  # Note: Dashboard image already includes nginx, so this service is optional
-  # Kept for backwards compatibility if users want a separate nginx instance
-  nginx:
-    image: nginx:alpine
-    container_name: gati_nginx
-    ports:
-      - "${NGINX_PORT:-8080}:80"
-    depends_on:
-      - backend
-      - dashboard
-    networks:
-      - gati_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 volumes:
-  sqlite_data:
+  gati_data:
+    driver: local
 
 networks:
   gati_network:

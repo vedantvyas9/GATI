@@ -8,9 +8,9 @@ from .auth import AuthManager
 
 def get_gati_root() -> Path:
     """Get the root directory of GATI installation."""
-    # When installed via pip, we need to find the package installation directory
+    # When installed via pip, docker-compose.yml is in the gati package directory
     import gati
-    gati_pkg = Path(gati.__file__).parent.parent.parent
+    gati_pkg = Path(gati.__file__).parent
     return gati_pkg
 
 
@@ -34,31 +34,30 @@ def check_authentication():
 
 
 def start_services(args):
-    """Start GATI backend and dashboard using Docker Compose."""
-    # Check authentication first
-    if not check_authentication():
-        sys.exit(1)
-
-    gati_root = get_gati_root()
-    compose_file = gati_root / "docker-compose.yml"
-    
-    if not compose_file.exists():
-        print(f"Error: docker-compose.yml not found at {compose_file}")
-        print("Please ensure GATI is properly installed.")
-        sys.exit(1)
-    
-    cmd = ["docker-compose", "-f", str(compose_file), "up"]
-    if args.detach:
-        cmd.append("-d")
-    
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error starting services: {e}")
-        sys.exit(1)
-    except FileNotFoundError:
-        print("Error: docker-compose not found. Please install Docker and Docker Compose.")
-        sys.exit(1)
+    """Guide users to start GATI backend and dashboard."""
+    print("\n" + "=" * 70)
+    print("🚀 GATI - Local-first observability for AI agents")
+    print("=" * 70)
+    print("\n✅ GATI SDK is installed and ready to use!")
+    print("\nTo view traces in the dashboard, clone the GATI repository:\n")
+    print("  git clone https://github.com/gati-ai/gati-sdk.git")
+    print("  cd gati-sdk")
+    print("  docker-compose up")
+    print("\nThis will start:")
+    print("  • Backend: http://localhost:8000")
+    print("  • Dashboard: http://localhost:3000")
+    print("\n" + "=" * 70)
+    print("\nSDK Usage (no dashboard needed):")
+    print("=" * 70)
+    print("\n  from gati import observe")
+    print("")
+    print("  @observe()")
+    print("  def my_agent(query):")
+    print("      # Your agent code")
+    print("      return result")
+    print("\n  # Traces are logged to stdout automatically")
+    print("  # Run docker-compose (above) to view in dashboard")
+    print("\n" + "=" * 70 + "\n")
 
 
 def stop_services(args):

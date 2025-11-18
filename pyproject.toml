@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gati"
+dynamic = ["version"]
+description = "Local-first observability for AI agents. Track LLM calls, tool usage, and agent state."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "GATI Team", email = "support@gati.dev"}
+]
+keywords = ["ai", "agents", "llm", "observability", "tracing", "langchain", "langgraph", "monitoring", "dashboard"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Framework :: FastAPI",
+    "Framework :: AsyncIO",
+]
+
+dependencies = [
+    "requests>=2.31.0",
+    "typing-extensions>=4.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.7.0",
+    "mypy>=1.5.0",
+    "ruff>=0.0.280",
+    "types-requests>=2.31.0",
+]
+langchain = [
+    "langchain>=0.1.0",
+    "langchain-core>=0.1.0",
+]
+langgraph = [
+    "langgraph>=0.0.1",
+]
+backend = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "psycopg2-binary>=2.9.9",
+    "sqlalchemy>=2.0.25",
+    "python-dotenv>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/gati-ai/gati-sdk"
+Documentation = "https://docs.gati.dev"
+Repository = "https://github.com/gati-ai/gati-sdk"
+Issues = "https://github.com/gati-ai/gati-sdk/issues"
+
+[project.scripts]
+gati = "gati.cli.main:main"
+
+[tool.setuptools]
+packages = {find = {where = ["sdk"]}}
+
+[tool.setuptools.package-dir]
+"" = "sdk"
+
+[tool.setuptools.package-data]
+gati = ["docker-compose.yml", "py.typed"]
+
+[tool.setuptools.dynamic]
+version = {attr = "gati.version.__version__"}
