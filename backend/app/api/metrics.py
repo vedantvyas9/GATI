@@ -1,10 +1,10 @@
 """Metrics aggregation API endpoints."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import func, select, and_
+from sqlalchemy import func, select, and_, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.connection import get_async_session
@@ -19,6 +19,7 @@ from app.schemas import (
     AgentComparisonData,
 )
 from app.utils.timezone import format_datetime_local
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -211,30 +212,64 @@ async def get_cost_timeline(
         # Calculate start date
         start_date = datetime.utcnow() - timedelta(days=days)
 
-        # Get daily cost data
-        cost_stmt = (
+        # Get all runs in the date range
+        runs_stmt = (
             select(
-                func.date(Run.created_at).label("date"),
-                func.coalesce(func.sum(Run.total_cost), 0).label("daily_cost"),
+                Run.created_at,
+                Run.total_cost,
             )
             .where(Run.created_at >= start_date)
-            .group_by(func.date(Run.created_at))
-            .order_by(func.date(Run.created_at).asc())
+            .order_by(Run.created_at.asc())
         )
 
-        cost_result = await session.execute(cost_stmt)
-        cost_rows = cost_result.all()
+        runs_result = await session.execute(runs_stmt)
+        runs_rows = runs_result.all()
 
-        # Build result with cumulative costs
+        # Group by date in Python (more reliable across databases)
+        daily_costs: Dict[str, float] = {}
+        for row in runs_rows:
+            created_at = row[0]
+            cost = float(row[1] or 0)
+            
+            if created_at is None:
+                continue
+                
+            # Extract date part (YYYY-MM-DD)
+            if isinstance(created_at, datetime):
+                date_key = created_at.date().isoformat()
+            elif isinstance(created_at, date):
+                date_key = created_at.isoformat()
+            else:
+                # Handle string dates
+                try:
+                    if isinstance(created_at, str):
+                        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        date_key = dt.date().isoformat()
+                    else:
+                        continue
+                except (ValueError, AttributeError):
+                    continue
+            
+            daily_costs[date_key] = daily_costs.get(date_key, 0.0) + cost
+
+        # Build result with cumulative costs, sorted by date
         cumulative_cost = 0.0
         result: List[CostTimestampData] = []
-
-        for row in cost_rows:
-            daily_cost = float(row[1] or 0)
+        
+        for date_key in sorted(daily_costs.keys()):
+            daily_cost = daily_costs[date_key]
             cumulative_cost += daily_cost
+            
+            # Parse date and format for display
+            try:
+                parsed_date = datetime.strptime(date_key, "%Y-%m-%d")
+                timestamp_str = format_datetime_local(parsed_date)
+            except (ValueError, TypeError):
+                timestamp_str = date_key
+            
             result.append(
                 CostTimestampData(
-                    timestamp=format_datetime_local(row[0]) if row[0] else "",
+                    timestamp=timestamp_str,
                     cost=daily_cost,
                     cumulative_cost=cumulative_cost,
                 )
@@ -264,35 +299,72 @@ async def get_tokens_timeline(
         # Calculate start date
         start_date = datetime.utcnow() - timedelta(days=days)
 
-        # Get daily token data
-        tokens_stmt = (
+        # Get all runs in the date range
+        runs_stmt = (
             select(
-                func.date(Run.created_at).label("date"),
-                func.coalesce(func.sum(Run.tokens_in), 0).label("daily_tokens_in"),
-                func.coalesce(func.sum(Run.tokens_out), 0).label("daily_tokens_out"),
+                Run.created_at,
+                Run.tokens_in,
+                Run.tokens_out,
             )
             .where(Run.created_at >= start_date)
-            .group_by(func.date(Run.created_at))
-            .order_by(func.date(Run.created_at).asc())
+            .order_by(Run.created_at.asc())
         )
 
-        tokens_result = await session.execute(tokens_stmt)
-        tokens_rows = tokens_result.all()
+        runs_result = await session.execute(runs_stmt)
+        runs_rows = runs_result.all()
 
-        # Build result with cumulative tokens
+        # Group by date in Python (more reliable across databases)
+        daily_tokens: Dict[str, Dict[str, float]] = {}
+        for row in runs_rows:
+            created_at = row[0]
+            tokens_in = float(row[1] or 0)
+            tokens_out = float(row[2] or 0)
+            
+            if created_at is None:
+                continue
+                
+            # Extract date part (YYYY-MM-DD)
+            if isinstance(created_at, datetime):
+                date_key = created_at.date().isoformat()
+            elif isinstance(created_at, date):
+                date_key = created_at.isoformat()
+            else:
+                # Handle string dates
+                try:
+                    if isinstance(created_at, str):
+                        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        date_key = dt.date().isoformat()
+                    else:
+                        continue
+                except (ValueError, AttributeError):
+                    continue
+            
+            if date_key not in daily_tokens:
+                daily_tokens[date_key] = {"in": 0.0, "out": 0.0}
+            daily_tokens[date_key]["in"] += tokens_in
+            daily_tokens[date_key]["out"] += tokens_out
+
+        # Build result with cumulative tokens, sorted by date
         cumulative_tokens_in = 0.0
         cumulative_tokens_out = 0.0
         result: List[TokensTimestampData] = []
-
-        for row in tokens_rows:
-            daily_tokens_in = float(row[1] or 0)
-            daily_tokens_out = float(row[2] or 0)
+        
+        for date_key in sorted(daily_tokens.keys()):
+            daily_tokens_in = daily_tokens[date_key]["in"]
+            daily_tokens_out = daily_tokens[date_key]["out"]
             cumulative_tokens_in += daily_tokens_in
             cumulative_tokens_out += daily_tokens_out
 
+            # Parse date and format for display
+            try:
+                parsed_date = datetime.strptime(date_key, "%Y-%m-%d")
+                timestamp_str = format_datetime_local(parsed_date)
+            except (ValueError, TypeError):
+                timestamp_str = date_key
+
             result.append(
                 TokensTimestampData(
-                    timestamp=format_datetime_local(row[0]) if row[0] else "",
+                    timestamp=timestamp_str,
                     tokens_in=daily_tokens_in,
                     tokens_out=daily_tokens_out,
                     cumulative_tokens_in=cumulative_tokens_in,

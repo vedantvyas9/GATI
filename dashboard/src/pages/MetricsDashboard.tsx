@@ -34,7 +34,7 @@ export default function MetricsDashboard() {
     costTimeline: [],
     tokensTimeline: [],
     agentsComparison: [],
-    loading: false,
+    loading: true,
     error: null,
   })
   const [days, setDays] = useState(30)
@@ -60,12 +60,17 @@ export default function MetricsDashboard() {
           loading: false,
           error: null,
         })
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to fetch metrics:', err)
+        const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to load metrics. Please try again.'
+        const statusCode = err?.response?.status
+        const fullError = statusCode 
+          ? `Error ${statusCode}: ${errorMessage}` 
+          : errorMessage
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: 'Failed to load metrics. Please try again.',
+          error: fullError,
         }))
       }
     }
@@ -86,7 +91,18 @@ export default function MetricsDashboard() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
-            <p className="text-red-700 dark:text-red-300">{state.error}</p>
+            <h2 className="text-xl font-bold text-red-800 dark:text-red-200 mb-2">
+              Failed to Load Metrics
+            </h2>
+            <p className="text-red-700 dark:text-red-300 mb-4">{state.error}</p>
+            <div className="text-sm text-red-600 dark:text-red-400 space-y-1">
+              <p>Please check:</p>
+              <ul className="list-disc list-inside ml-2 space-y-1">
+                <li>Backend server is running on port 8000</li>
+                <li>API endpoints are accessible at <code className="bg-red-100 dark:bg-red-900/30 px-1 rounded">http://localhost:8000/api/metrics/summary</code></li>
+                <li>Browser console for detailed error messages</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

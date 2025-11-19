@@ -162,6 +162,23 @@ Open your browser to [http://localhost:3000](http://localhost:3000) to see:
 
 **All data is stored locally in SQLite** - nothing leaves your machine except anonymous usage metrics.
 
+### Metrics Dashboard
+
+Track aggregate metrics across all your agents during development. Navigate to the **Metrics** page in the dashboard to view:
+
+![GATI metrics dashboard showing aggregate agent metrics](./metrics_dashboard.png)
+
+The metrics dashboard provides:
+
+- **Summary Cards**: Total agents, runs, events, costs, and averages
+- **Cost Timeline**: Daily cost trends with cumulative totals over time
+- **Token Usage Timeline**: Input/output token consumption patterns
+- **Agent Comparison**: Side-by-side comparison of runs, costs, and token usage per agent
+- **Top Agents**: Rankings by cost and number of runs
+- **Date Range Filtering**: View metrics for the last 7, 14, 30, 60, or 90 days
+
+Access the metrics dashboard at [http://localhost:3000/metrics](http://localhost:3000/metrics) or click the "Metrics" link in the navigation bar.
+
 ---
 
 ## MCP Server Integration for VS Code
