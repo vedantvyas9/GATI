@@ -1,4 +1,4 @@
-# GATI SDK
+# GATI SDK (Public Beta)
 
 **Local-First Intelligent Observability Platform for AI Agents**
 
