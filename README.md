@@ -25,7 +25,7 @@ That's it! No authentication required. Start tracking immediately.
 - **Local-First** - All trace data stays on your machine
 - **Real-Time Cost Tracking** - Monitor LLM API costs and token usage
 - **Visual Dashboard** - React interface for exploring traces
-- **AI Assistant Integration** - Query traces using Claude Desktop, GitHub Copilot or Cursor via MCP
+- **AI Assistant Integration** - Query traces using GitHub Copilot via MCP (just run `gati mcp`)
 - **Privacy-Focused** - All development traces stored locally; only anonymous usage metrics are collected
 - **Instant Setup** - No authentication barriers, just install and go
 
@@ -164,83 +164,45 @@ Open your browser to [http://localhost:3000](http://localhost:3000) to see:
 
 ---
 
-## MCP Server Integration
+## MCP Server Integration for VS Code
 
-Connect GATI to Claude Desktop or GitHub Copilot to query your traces using natural language.
+Query your agent traces directly from GitHub Copilot Chat using natural language.
 
 ### What is MCP?
 
-The Model Context Protocol (MCP) allows AI assistants to access your local trace data and answer questions about your agent's behavior.
+The Model Context Protocol (MCP) allows AI assistants like GitHub Copilot to access your local trace data and answer questions about your agent's behavior.
 
-### Setup for Claude Desktop
-
-**Easy Setup (Recommended):**
-
-1. **Start the GATI services** (if not already running):
-   ```bash
-   gati start
-   ```
-
-2. **Run the setup command**:
-   ```bash
-   gati mcp setup claude --write-claude
-   ```
-   
-   This automatically:
-   - Finds the MCP server path
-   - Updates your Claude Desktop configuration file
-   - Configures everything correctly
-
-3. **Restart Claude Desktop**
-
-4. **Start asking questions**:
-   - "Show me all my agent runs from today"
-   - "What was the cost of the last run?"
-   - "Compare the last 3 runs"
-   - "Why was run X slow?"
-   - "Which agent used the most tokens?"
-
-**Manual Setup (Alternative):**
-
-If you prefer to set it up manually:
-```bash
-gati mcp setup claude
-```
-
-This will show you the exact configuration to copy into your Claude Desktop config file.
-
-### Setup for GitHub Copilot (VS Code)
-
-**Easy Setup (Recommended):**
+### Setup (2 commands)
 
 1. **Start the GATI services**:
    ```bash
    gati start
    ```
 
-2. **Run the setup command**:
+2. **Run the MCP setup command**:
    ```bash
-   gati mcp setup
+   gati mcp
    ```
-   
+
    This automatically:
-   - Finds the MCP server path
-   - Creates `mcp.json` in your current directory
-   - Configures everything correctly
+   - Builds the MCP server if needed
+   - Creates `.vscode/mcp.json` in your workspace
+   - Configures the connection to your local backend
 
 3. **Reload VS Code**:
    - Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
    - Type "Developer: Reload Window"
-   - Or simply restart VS Code
+   - Hit Enter
 
-4. **Start using it!**:
-   - Type in chat: "@gati show me all agent runs"
-   - "@gati what was the average cost today?"
-   - "@gati find runs with errors"
+4. **Start querying your traces!**
 
-**Manual Setup (Alternative):**
-
-If you prefer to set it up manually, the `gati mcp setup` command will show you the exact configuration needed.
+   Open GitHub Copilot Agent Chat and try:
+   - `show me all agent runs in gati`
+   - `what was the average cost today?`
+   - `find runs with errors`
+   - `compare the last 3 runs`
+   - `which agent used the most tokens?`
+   Try the above commands preferably using a claude model
 
 ### MCP Server Features
 
@@ -315,17 +277,15 @@ observe.init(name="my_agent", telemetry=False)
 ## CLI Commands
 
 ```bash
-# Start local services (backend, dashboard)
+# Start local services (backend, dashboard, mcp-server)
 gati start                          # Run in background (detached mode)
 gati start -f                       # Run in foreground with logs visible
 gati start --backend-port 8080      # Custom backend port
 gati start --dashboard-port 3001    # Custom dashboard port
 
-# MCP Server Setup (Easy onboarding!)
-gati mcp setup                      # Set up for VS Code (creates mcp.json)
-gati mcp setup claude               # Show Claude Desktop config
-gati mcp setup claude --write-claude # Auto-update Claude Desktop config
-gati mcp setup both                 # Set up for both VS Code and Claude
+# MCP Server Setup for VS Code
+gati mcp                            # Set up MCP server (creates .vscode/mcp.json)
+gati mcp --force                    # Overwrite existing configuration
 
 # Stop services
 gati stop                           # Stop all services
@@ -479,21 +439,37 @@ gati start
 3. Verify events are being sent: Check `gati logs backend`
 4. Restart services: `gati stop && gati start`
 
-### MCP Server Not Connecting
+### MCP Server Not Showing in VS Code
 
-```bash
-# Verify MCP server path is correct
-node /path/to/gati/mcp-server/dist/index.js
+1. **Ensure services are running**:
+   ```bash
+   gati status  # Should show backend and mcp-server running
+   ```
 
-# Check database path is accessible
-ls ~/.gati/data/gati.db
+2. **Verify configuration exists**:
+   ```bash
+   cat .vscode/mcp.json  # Should show the MCP server config
+   ```
 
-# Verify backend is running
-curl http://localhost:8000/health
+3. **Rebuild MCP configuration**:
+   ```bash
+   gati mcp --force  # Overwrite and recreate config
+   ```
 
-# Check MCP server logs (if running as service)
-gati logs mcp-server
-```
+4. **Reload VS Code completely**:
+   - Press `Cmd+Shift+P` → "Developer: Reload Window"
+   - Or restart VS Code
+
+5. **Check VS Code Output**:
+   - View → Output
+   - Select "MCP" from the dropdown
+   - Look for GATI server initialization messages
+
+6. **Verify backend connection**:
+   ```bash
+   curl http://localhost:8000/health
+   # Should return: {"status":"healthy","version":"1.0.0"}
+   ```
 
 ### Telemetry Issues
 
@@ -521,7 +497,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 💬 Support
 
-Fill out this 2 minute google form: https://docs.google.com/forms/d/e/1FAIpQLSfGTXR1iyeSWfKGXOa7xhyjEW08gowEFwvgukI_v90qQ3Qpjg/viewform?usp=dialog
+Fill out this 2 minute google form and we will get back in 48 hours: https://docs.google.com/forms/d/e/1FAIpQLSfGTXR1iyeSWfKGXOa7xhyjEW08gowEFwvgukI_v90qQ3Qpjg/viewform?usp=dialog
 
 
 ---

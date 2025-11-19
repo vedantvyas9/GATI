@@ -1,7 +1,7 @@
 /**
  * Formatting utilities for LLM-friendly output
  */
-import { AgentStats, RunDetails, Event } from '../database/queries.js';
+import { AgentStats, RunDetails, Event } from '../api/client.js';
 
 /**
  * Format agents list for LLM consumption

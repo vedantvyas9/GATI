@@ -19,7 +19,7 @@ class APIClient {
 
   constructor(baseURL?: string) {
     // Determine the base URL for API requests
-    // Priority: explicit baseURL > VITE_API_BASE_URL env > relative /api path
+    // Priority: explicit baseURL > VITE_API_BASE_URL env > default localhost:8000/api
     let defaultBaseURL = baseURL
 
     if (!defaultBaseURL) {
@@ -30,9 +30,19 @@ class APIClient {
       }
     }
 
-    // Default to /api for relative calls (works through nginx proxy or dev proxy)
+    // Default to localhost:8000/api when served as static files (production)
+    // This works when dashboard and backend are on different ports
+    // In dev mode with Vite, the proxy in vite.config.ts handles /api -> backend
     if (!defaultBaseURL) {
+      // Check if we're in development (has Vite dev server) or production (static files)
+      const isDev = (import.meta as any).env?.DEV
+      if (!isDev) {
+        // Production: use full URL to backend (when served via http.server or nginx)
+        defaultBaseURL = 'http://localhost:8000/api'
+      } else {
+        // Development: use relative path (vite proxy will handle it)
       defaultBaseURL = '/api'
+      }
     }
 
     this.client = axios.create({
@@ -45,7 +55,14 @@ class APIClient {
 
   // Health Check
   async healthCheck(): Promise<{ status: string; database: string }> {
-    const response = await this.client.get('/health')
+    // Health endpoint is at /health (not /api/health), so use root URL
+    const healthClient = axios.create({
+      baseURL: this.client.defaults.baseURL?.replace('/api', '') || 'http://localhost:8000',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    const response = await healthClient.get('/health')
     return response.data
   }
 

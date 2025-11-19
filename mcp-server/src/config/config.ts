@@ -3,17 +3,17 @@
  */
 
 export interface GatiMCPConfig {
-  databasePath: string;
+  backendUrl: string;
 }
 
 /**
  * Load configuration from environment variables
  */
 export function loadConfig(): GatiMCPConfig {
-  const databasePath = process.env.DATABASE_PATH || './gati.db';
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
   return {
-    databasePath,
+    backendUrl,
   };
 }
 
@@ -21,7 +21,14 @@ export function loadConfig(): GatiMCPConfig {
  * Validate configuration
  */
 export function validateConfig(config: GatiMCPConfig): void {
-  if (!config.databasePath) {
-    throw new Error('DATABASE_PATH is required');
+  if (!config.backendUrl) {
+    throw new Error('BACKEND_URL is required');
+  }
+  
+  // Validate URL format
+  try {
+    new URL(config.backendUrl);
+  } catch {
+    throw new Error(`Invalid BACKEND_URL format: ${config.backendUrl}`);
   }
 }

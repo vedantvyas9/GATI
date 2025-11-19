@@ -62,13 +62,30 @@ def find_mcp_server_path() -> Optional[Path]:
     if cwd_mcp.exists():
         return cwd_mcp
     
-    # Try to find in installed package location
+    # Try to find in installed package location (pip install)
     try:
         import gati
         gati_pkg = Path(gati.__file__).parent.parent.parent
-        installed_mcp = gati_pkg / "mcp-server" / "dist" / "index.js"
+        # Check if installed via pip (site-packages structure)
+        # The MCP server should be at the same level as the gati package
+        installed_mcp = gati_pkg.parent / "mcp-server" / "dist" / "index.js"
         if installed_mcp.exists():
             return installed_mcp
+        
+        # Also check if mcp-server is in the gati package directory (editable installs)
+        pkg_mcp = gati_pkg / "mcp-server" / "dist" / "index.js"
+        if pkg_mcp.exists():
+            return pkg_mcp
+        
+        # Check if we're in a development environment (mcp-server at repo root)
+        repo_root = gati_pkg
+        while repo_root.parent != repo_root:
+            repo_root = repo_root.parent
+            if (repo_root / "mcp-server" / "dist" / "index.js").exists():
+                return repo_root / "mcp-server" / "dist" / "index.js"
+            # Stop if we've gone too far up
+            if repo_root.name in ("site-packages", "dist-packages", "lib"):
+                break
     except Exception:
         pass
     

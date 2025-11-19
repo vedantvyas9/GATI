@@ -223,14 +223,13 @@ def show_logs(args):
 
 
 def setup_mcp(args):
-    """Set up MCP server configuration for VS Code or Claude Desktop."""
+    """Set up MCP server configuration for VS Code."""
     import json
-    import platform
-    
+
     print("\n" + "=" * 70)
-    print("🔧 GATI MCP Server Setup")
+    print("🔧 GATI MCP Server Setup for VS Code")
     print("=" * 70 + "\n")
-    
+
     # Find MCP server path
     mcp_path = find_mcp_server_path()
     if not mcp_path:
@@ -239,7 +238,7 @@ def setup_mcp(args):
         print("  1. You're in the GATI SDK repository, or")
         print("  2. The MCP server is built: cd mcp-server && npm run build")
         print("\nTrying to build MCP server now...")
-        
+
         # Try to build it
         package_dir = Path(__file__).parent.parent.parent.parent
         mcp_dir = package_dir / "mcp-server"
@@ -264,87 +263,71 @@ def setup_mcp(args):
                 sys.exit(1)
         else:
             sys.exit(1)
-    
+
     mcp_path = mcp_path.resolve()  # Get absolute path
-    db_path = Path.home() / ".gati" / "data" / "gati.db"
     backend_url = os.environ.get("GATI_BACKEND_URL", "http://localhost:8000")
-    
+
     print(f"✅ Found MCP server at: {mcp_path}")
-    print(f"✅ Database path: {db_path}")
     print(f"✅ Backend URL: {backend_url}\n")
-    
-    if args.target == "vscode" or args.target == "both":
-        # Generate mcp.json for VS Code
-        mcp_json = {
-            "mcp.servers": {
-                "gati": {
-                    "command": "node",
-                    "args": [str(mcp_path)],
-                    "env": {
-                        "DATABASE_PATH": str(db_path),
-                        "BACKEND_URL": backend_url
-                    }
-                }
-            }
+
+    # Use python -m gati.cli.mcp_launcher which works both locally and after pip install
+    # Find the Python executable that has gati installed
+    try:
+        import gati
+        import sys
+        python_exe = sys.executable
+    except:
+        # Fallback to python3
+        python_exe = "python3"
+
+    server_config = {
+        "type": "stdio",
+        "command": python_exe,
+        "args": [
+            "-m", "gati.cli.mcp_launcher"
+        ],
+        "env": {
+            "BACKEND_URL": backend_url
         }
-        
-        output_file = Path.cwd() / "mcp.json"
-        if output_file.exists() and not args.force:
-            print(f"⚠️  {output_file} already exists. Use --force to overwrite.")
-        else:
-            output_file.write_text(json.dumps(mcp_json, indent=2))
-            print(f"✅ Created {output_file}")
-            print("\nNext steps:")
-            print("  1. Reload VS Code window (Cmd+Shift+P → 'Developer: Reload Window')")
-            print("  2. Or restart VS Code")
-            print("  3. The GATI MCP server should now be available in GitHub Copilot\n")
-    
-    if args.target == "claude" or args.target == "both":
-        # Generate Claude Desktop config
-        claude_config = {
-            "mcpServers": {
-                "gati": {
-                    "command": "node",
-                    "args": [str(mcp_path)],
-                    "env": {
-                        "DATABASE_PATH": str(db_path),
-                        "BACKEND_URL": backend_url
-                    }
-                }
-            }
+    }
+
+    mcp_json = {
+        "servers": {
+            "gati": server_config
         }
-        
-        if platform.system() == "Darwin":  # macOS
-            claude_config_path = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
-        elif platform.system() == "Windows":
-            claude_config_path = Path(os.environ.get("APPDATA", "")) / "Claude" / "claude_desktop_config.json"
-        else:  # Linux
-            claude_config_path = Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
-        
-        print(f"\n📝 Claude Desktop Configuration:")
-        print(f"   File: {claude_config_path}")
-        print("\n   Add this to your Claude Desktop config:")
-        print("   " + "=" * 66)
-        config_str = json.dumps(claude_config, indent=2)
-        for line in config_str.split("\n"):
-            print("   " + line)
-        print("   " + "=" * 66)
-        
-        if args.write_claude and claude_config_path.exists():
-            # Merge with existing config
-            try:
-                existing = json.loads(claude_config_path.read_text())
-            except (json.JSONDecodeError, FileNotFoundError):
-                existing = {}
-            existing.setdefault("mcpServers", {}).update(claude_config["mcpServers"])
-            claude_config_path.write_text(json.dumps(existing, indent=2))
-            print(f"\n✅ Updated {claude_config_path}")
-            print("   Please restart Claude Desktop for changes to take effect.\n")
-        elif args.write_claude:
-            print(f"\n⚠️  Claude Desktop config file not found at {claude_config_path}")
-            print("   Please create it manually or start Claude Desktop first.\n")
-        else:
-            print("\n   Or run with --write-claude to auto-update (if file exists)\n")
+    }
+
+    # Try to find workspace root (look for .vscode, .git, or common project files)
+    workspace_root = Path.cwd()
+    for marker in [".vscode", ".git", "package.json", "pyproject.toml", "setup.py"]:
+        current = Path.cwd()
+        while current != current.parent:
+            if (current / marker).exists():
+                workspace_root = current
+                break
+            current = current.parent
+
+    # Ensure .vscode directory exists
+    vscode_dir = workspace_root / ".vscode"
+    vscode_dir.mkdir(exist_ok=True)
+
+    output_file = vscode_dir / "mcp.json"
+    if output_file.exists() and not args.force:
+        print(f"⚠️  {output_file} already exists. Use --force to overwrite.")
+        sys.exit(0)
+
+    output_file.write_text(json.dumps(mcp_json, indent=2))
+    print(f"✅ Created {output_file}")
+    print(f"\n📝 VS Code MCP Configuration:")
+    print(f"   Location: {output_file}")
+    print(f"   Backend: {backend_url}\n")
+    print("Next steps:")
+    print("  1. Ensure GATI backend is running: gati start")
+    print("  2. Reload VS Code window (Cmd+Shift+P → 'Developer: Reload Window')")
+    print("  3. Open GitHub Copilot Chat")
+    print("  4. The GATI MCP server should now be available with tools like:")
+    print("     - list_agents, get_agent_stats, list_runs, etc.")
+    print("  5. You can verify in VS Code Output panel (View → Output → 'MCP')\n")
 
 
 def main():
@@ -358,9 +341,8 @@ Examples:
   gati start -f                       Start in foreground with logs visible
   gati start --backend-port 8080      Start with custom backend port
   gati start --dashboard-port 3001    Start with custom dashboard port
-  gati mcp setup                      Set up MCP server for VS Code (creates mcp.json)
-  gati mcp setup claude               Show Claude Desktop configuration
-  gati mcp setup both                 Set up for both VS Code and Claude Desktop
+  gati mcp                            Set up MCP server for VS Code (creates .vscode/mcp.json)
+  gati mcp --force                    Overwrite existing MCP configuration
   gati stop                           Stop all services
   gati status                         Show service status
   gati logs                           Show logs
@@ -419,23 +401,11 @@ Environment Variables:
     logs_parser.set_defaults(func=show_logs)
     
     # MCP Setup command
-    mcp_parser = subparsers.add_parser("mcp", help="Set up MCP server configuration")
-    mcp_parser.add_argument(
-        "target",
-        choices=["vscode", "claude", "both"],
-        default="vscode",
-        nargs="?",
-        help="Target platform (default: vscode)"
-    )
+    mcp_parser = subparsers.add_parser("mcp", help="Set up MCP server for VS Code")
     mcp_parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing mcp.json file"
-    )
-    mcp_parser.add_argument(
-        "--write-claude",
-        action="store_true",
-        help="Auto-update Claude Desktop config file (if it exists)"
+        help="Overwrite existing .vscode/mcp.json file"
     )
     mcp_parser.set_defaults(func=setup_mcp)
 

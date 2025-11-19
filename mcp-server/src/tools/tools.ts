@@ -2,7 +2,7 @@
  * MCP Tool implementations for GATI traces
  */
 import { z } from 'zod';
-import * as queries from '../database/queries.js';
+import * as api from '../api/client.js';
 import * as formatters from '../utils/formatters.js';
 
 /**
@@ -14,7 +14,7 @@ export const listAgentsTool = {
   description: 'List all agents being tracked with their statistics including total runs, events, and costs',
   inputSchema: z.object({}),
   handler: async () => {
-    const agents = await queries.listAgents();
+    const agents = await api.listAgents();
     return formatters.formatAgentsList(agents);
   },
 };
@@ -30,7 +30,7 @@ export const getAgentStatsTool = {
     agent_name: z.string().describe('Name of the agent to get statistics for'),
   }),
   handler: async (args: { agent_name: string }) => {
-    const agent = await queries.getAgentStats(args.agent_name);
+    const agent = await api.getAgentStats(args.agent_name);
 
     if (!agent) {
       return `Agent "${args.agent_name}" not found. Use list_agents to see available agents.`;
@@ -53,7 +53,7 @@ export const listRunsTool = {
     offset: z.number().optional().default(0).describe('Number of runs to skip (for pagination)'),
   }),
   handler: async (args: { agent_name: string; limit?: number; offset?: number }) => {
-    const runs = await queries.listRuns(args.agent_name, args.limit, args.offset);
+    const runs = await api.listRuns(args.agent_name, args.limit || 20, args.offset || 0);
     return formatters.formatRunsList(runs);
   },
 };
@@ -70,7 +70,7 @@ export const getRunDetailsTool = {
     run_name: z.string().describe('Name of the run (e.g., "run 1", "run 2")'),
   }),
   handler: async (args: { agent_name: string; run_name: string }) => {
-    const run = await queries.getRunByName(args.agent_name, args.run_name);
+    const run = await api.getRunByName(args.agent_name, args.run_name);
 
     if (!run) {
       return `Run "${args.run_name}" not found for agent "${args.agent_name}". Use list_runs to see available runs.`;
@@ -92,13 +92,12 @@ export const getRunTimelineTool = {
     run_name: z.string().describe('Name of the run'),
   }),
   handler: async (args: { agent_name: string; run_name: string }) => {
-    const run = await queries.getRunByName(args.agent_name, args.run_name);
+    const events = await api.getRunTimeline(args.agent_name, args.run_name);
 
-    if (!run) {
-      return `Run "${args.run_name}" not found for agent "${args.agent_name}".`;
+    if (events.length === 0) {
+      return `No events found for run "${args.run_name}" of agent "${args.agent_name}". The run may not exist.`;
     }
 
-    const events = await queries.getRunTimeline(run.run_id);
     return formatters.formatTimeline(events);
   },
 };
@@ -115,13 +114,12 @@ export const getExecutionTraceTool = {
     run_name: z.string().describe('Name of the run'),
   }),
   handler: async (args: { agent_name: string; run_name: string }) => {
-    const run = await queries.getRunByName(args.agent_name, args.run_name);
+    const events = await api.getExecutionTrace(args.agent_name, args.run_name);
 
-    if (!run) {
-      return `Run "${args.run_name}" not found for agent "${args.agent_name}".`;
+    if (events.length === 0) {
+      return `No events found for run "${args.run_name}" of agent "${args.agent_name}". The run may not exist.`;
     }
 
-    const events = await queries.getExecutionTrace(run.run_id);
     return formatters.formatExecutionTrace(events);
   },
 };
@@ -142,13 +140,13 @@ export const compareRunsTool = {
       return 'Please provide at least one run name to compare.';
     }
 
-    // Get run IDs for all run names
+    // Get all runs
     const runPromises = args.run_names.map(name =>
-      queries.getRunByName(args.agent_name, name)
+      api.getRunByName(args.agent_name, name)
     );
 
     const runs = await Promise.all(runPromises);
-    const validRuns = runs.filter(r => r !== null) as queries.RunDetails[];
+    const validRuns = runs.filter(r => r !== null) as api.RunDetails[];
 
     if (validRuns.length === 0) {
       return `No runs found with the provided names for agent "${args.agent_name}".`;
@@ -188,7 +186,7 @@ export const searchEventsTool = {
     const startTime = args.start_time ? new Date(args.start_time) : undefined;
     const endTime = args.end_time ? new Date(args.end_time) : undefined;
 
-    const events = await queries.searchEvents(
+    const events = await api.searchEvents(
       args.agent_name,
       args.event_type,
       startTime,
@@ -211,7 +209,7 @@ export const getCostBreakdownTool = {
     agent_name: z.string().optional().describe('Filter by specific agent (optional, shows all agents if not provided)'),
   }),
   handler: async (args: { agent_name?: string }) => {
-    const breakdown = await queries.getCostBreakdown(args.agent_name);
+    const breakdown = await api.getCostBreakdown(args.agent_name);
     return formatters.formatCostBreakdown(breakdown);
   },
 };
@@ -225,7 +223,7 @@ export const getGlobalMetricsTool = {
   description: 'Get global metrics aggregated across all agents, including total costs, tokens, and event counts',
   inputSchema: z.object({}),
   handler: async () => {
-    const metrics = await queries.getGlobalMetrics();
+    const metrics = await api.getGlobalMetrics();
     return formatters.formatGlobalMetrics(metrics);
   },
 };
@@ -243,13 +241,11 @@ export const getEventDetailsTool = {
     event_type: z.string().optional().describe('Filter by event type (e.g., llm_call, tool_call). If not provided, shows all events.'),
   }),
   handler: async (args: { agent_name: string; run_name: string; event_type?: string }) => {
-    const run = await queries.getRunByName(args.agent_name, args.run_name);
+    const events = await api.getRunTimeline(args.agent_name, args.run_name);
 
-    if (!run) {
-      return `Run "${args.run_name}" not found for agent "${args.agent_name}".`;
+    if (events.length === 0) {
+      return `No events found for run "${args.run_name}" of agent "${args.agent_name}". The run may not exist.`;
     }
-
-    const events = await queries.getRunTimeline(run.run_id);
 
     // Filter by event type if provided
     const filteredEvents = args.event_type
@@ -261,7 +257,7 @@ export const getEventDetailsTool = {
     }
 
     // Format detailed output with full data
-    let output = `# Event Details for ${run.run_name}\n\n`;
+    let output = `# Event Details for ${args.run_name}\n\n`;
     output += `Found ${filteredEvents.length} event(s)\n\n`;
 
     filteredEvents.forEach((event, index) => {

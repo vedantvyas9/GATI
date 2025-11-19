@@ -15,7 +15,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { loadConfig, validateConfig } from './config/config.js';
-import { initializeDatabase, testConnection, closeDatabase } from './database/connection.js';
+import { setBackendConfig } from './api/client.js';
 import { allTools } from './tools/tools.js';
 import { initTelemetry, trackQuery, shutdownTelemetry } from './telemetry/client.js';
 
@@ -27,22 +27,8 @@ async function main() {
   const config = loadConfig();
   validateConfig(config);
 
-  // Initialize database connection
-  console.error('[GATI MCP] Initializing database connection...');
-  initializeDatabase(config);
-
-  // Test database connection
-  const isConnected = testConnection();
-  if (!isConnected) {
-    console.error('[GATI MCP] Failed to connect to database. Please check your DATABASE_PATH.');
-    process.exit(1);
-  }
-
-  console.error('[GATI MCP] Database connection successful');
-
-  // Initialize telemetry (opt-in by default, can disable via env var)
-  const telemetryEnabled = process.env.GATI_TELEMETRY !== 'false';
-  await initTelemetry(telemetryEnabled);
+  // Set backend configuration for API client
+  setBackendConfig({ backendUrl: config.backendUrl });
 
   // Create MCP server
   const server = new Server(
@@ -131,23 +117,49 @@ async function main() {
   process.on('SIGINT', async () => {
     console.error('[GATI MCP] Shutting down...');
     await shutdownTelemetry();
-    closeDatabase();
     process.exit(0);
   });
 
   process.on('SIGTERM', async () => {
     console.error('[GATI MCP] Shutting down...');
     await shutdownTelemetry();
-    closeDatabase();
     process.exit(0);
   });
 
-  // Start server with stdio transport
+  // Connect to transport IMMEDIATELY (before any async initialization)
+  // This allows VS Code to send initialize request right away
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   console.error('[GATI MCP] Server started successfully');
   console.error(`[GATI MCP] Available tools: ${allTools.map(t => t.name).join(', ')}`);
+
+  // Test backend connection asynchronously AFTER connecting to transport
+  // This will log warnings but won't prevent the server from starting
+  (async () => {
+    try {
+      console.error('[GATI MCP] Testing backend connection...');
+      const response = await fetch(`${config.backendUrl}/health`);
+      if (!response.ok) {
+        throw new Error(`Backend health check failed: ${response.status}`);
+      }
+      const health = await response.json() as { status: string };
+      console.error(`[GATI MCP] Backend connection successful (${health.status})`);
+    } catch (error: any) {
+      console.error(`[GATI MCP] Warning: Backend not available at ${config.backendUrl}`);
+      console.error(`[GATI MCP] Error: ${error.message || String(error)}`);
+      console.error('[GATI MCP] MCP server will start, but tools may not work until backend is running.');
+      console.error('[GATI MCP] Start backend with: gati start');
+      // Don't exit - let the server start anyway
+    }
+  })();
+
+  // Initialize telemetry asynchronously (don't block server startup)
+  const telemetryEnabled = process.env.GATI_TELEMETRY !== 'false';
+  initTelemetry(telemetryEnabled).catch((error) => {
+    console.error('[GATI MCP] Telemetry initialization failed:', error);
+    // Don't exit - telemetry is optional
+  });
 }
 
 // Run the server

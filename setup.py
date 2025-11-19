@@ -88,10 +88,11 @@ setup(
         ],
     },
 
-    # CLI entry point
+    # CLI entry points
     entry_points={
         "console_scripts": [
             "gati=gati.cli.main:main",
+            "gati-mcp-server=gati.cli.mcp_launcher:main",
         ],
     },
 
