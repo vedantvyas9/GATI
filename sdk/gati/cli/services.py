@@ -12,8 +12,9 @@ def find_backend_dir() -> Optional[Path]:
     
     Tries:
     1. Local development: ../../backend from package
-    2. GitHub clone location
-    3. Returns None if not found
+    2. Current working directory
+    3. Installed package location (pip install)
+    4. Returns None if not found
     """
     # Try relative to package (for development)
     package_dir = Path(__file__).parent.parent.parent.parent
@@ -25,6 +26,37 @@ def find_backend_dir() -> Optional[Path]:
     cwd_backend = Path.cwd() / "backend"
     if cwd_backend.exists() and (cwd_backend / "app").exists():
         return cwd_backend
+    
+    # Try to find in installed package location (pip install)
+    try:
+        import gati
+        import importlib.util
+        
+        # Get the installed package location
+        gati_spec = importlib.util.find_spec("gati")
+        if gati_spec and gati_spec.origin:
+            gati_init = Path(gati_spec.origin)  # .../site-packages/gati/__init__.py
+            site_packages = gati_init.parent.parent  # .../site-packages/
+            
+            # Backend is installed alongside gati package in site-packages/backend
+            # (from the custom build step that copies it to build/lib/backend)
+            direct_backend = site_packages / "backend"
+            if direct_backend.exists() and (direct_backend / "app").exists():
+                return direct_backend
+            
+            # Also check if backend is in the gati package directory (editable installs)
+            pkg_backend = gati_init.parent.parent / "backend"
+            if pkg_backend.exists() and (pkg_backend / "app").exists():
+                return pkg_backend
+            
+            # Look for gati-X.X.X directory structure (where backend might be in source dist)
+            for item in site_packages.glob("gati-*"):
+                if item.is_dir():
+                    pip_backend = item / "backend"
+                    if pip_backend.exists() and (pip_backend / "app").exists():
+                        return pip_backend
+    except Exception:
+        pass
     
     return None
 
@@ -39,6 +71,36 @@ def find_dashboard_dir() -> Optional[Path]:
     cwd_dashboard = Path.cwd() / "dashboard"
     if cwd_dashboard.exists() and (cwd_dashboard / "dist").exists():
         return cwd_dashboard
+    
+    # Try to find in installed package location (pip install)
+    try:
+        import gati
+        import importlib.util
+        
+        # Get the installed package location
+        gati_spec = importlib.util.find_spec("gati")
+        if gati_spec and gati_spec.origin:
+            gati_init = Path(gati_spec.origin)  # .../site-packages/gati/__init__.py
+            site_packages = gati_init.parent.parent  # .../site-packages/
+            
+            # Look for gati-X.X.X directory structure (where dashboard might be)
+            for item in site_packages.glob("gati-*"):
+                if item.is_dir():
+                    pip_dashboard = item / "dashboard"
+                    if pip_dashboard.exists() and (pip_dashboard / "dist").exists():
+                        return pip_dashboard
+            
+            # Fallback: check directly in site-packages
+            direct_dashboard = site_packages / "dashboard"
+            if direct_dashboard.exists() and (direct_dashboard / "dist").exists():
+                return direct_dashboard
+            
+            # Also check if dashboard is in the gati package directory
+            pkg_dashboard = gati_init.parent.parent / "dashboard"
+            if pkg_dashboard.exists() and (pkg_dashboard / "dist").exists():
+                return pkg_dashboard
+    except Exception:
+        pass
     
     return None
 
@@ -215,12 +277,12 @@ def start_dashboard(port: int = 3000) -> tuple[List[str], Dict[str, str], Option
             "Please build the dashboard first: cd dashboard && npm run build"
         )
     
-    # Use Python's http.server to serve static files
+    # Use SPA-aware server to handle client-side routing
     cmd = [
         sys.executable,
-        "-m", "http.server",
+        "-m", "gati.cli.spa_server",
         str(port),
-        "--directory", str(dist_dir),
+        str(dist_dir),
     ]
     
     return cmd, os.environ.copy(), None

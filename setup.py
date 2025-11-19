@@ -12,8 +12,10 @@ When installed via pip, users get:
 Dashboard requires cloning the GitHub repo and running docker-compose.
 """
 from setuptools import setup, find_packages
+from setuptools.command.build_py import build_py
 from pathlib import Path
 import re
+import shutil
 
 # Read version from sdk/gati/version.py
 version_file = Path(__file__).parent / "sdk" / "gati" / "version.py"
@@ -24,6 +26,24 @@ __version__ = version_match.group(1) if version_match else "0.1.3"
 # Read the root README
 readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text() if readme_file.exists() else ""
+
+
+class CustomBuildPy(build_py):
+    """Custom build that includes backend directory."""
+    def run(self):
+        # Run the standard build
+        super().run()
+        
+        # Copy backend directory to build directory
+        backend_src = Path(__file__).parent / "backend"
+        if backend_src.exists():
+            # Copy to build/lib/backend (will be included in wheel)
+            backend_dst = Path(self.build_lib) / "backend"
+            if backend_dst.exists():
+                shutil.rmtree(backend_dst)
+            shutil.copytree(backend_src, backend_dst, ignore=shutil.ignore_patterns(
+                '__pycache__', '*.pyc', '*.pyo', '.git', 'node_modules', '.DS_Store'
+            ))
 
 setup(
     name="gati",
@@ -51,6 +71,11 @@ setup(
             "py.typed",
             "docker-compose.yml",
         ],
+    },
+    
+    # Use custom build to include backend
+    cmdclass={
+        'build_py': CustomBuildPy,
     },
 
     # Python version requirement

@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: gati
-Version: 0.1.3
+Version: 0.1.0
 Summary: Local-first observability for AI agents. Track LLM calls, tool usage, and agent state.
 Home-page: https://github.com/vedantvyas9/gati
 Author: Vedant Vyas
@@ -49,6 +49,10 @@ Requires-Dist: uvicorn[standard]>=0.27.0; extra == "backend"
 Requires-Dist: psycopg2-binary>=2.9.9; extra == "backend"
 Requires-Dist: sqlalchemy>=2.0.25; extra == "backend"
 Requires-Dist: python-dotenv>=1.0.0; extra == "backend"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
 
 # GATI SDK (Public Beta)
 
@@ -332,7 +336,7 @@ All development traces remain on your machine:
 # Disable telemetry in your code
 observe.init(name="my_agent", telemetry=False)
 ```
-
+However, total number of anonymous MCP queries will always be counted.
 **Why we collect metrics:**
 - Understand which frameworks are popular
 - Track SDK adoption and usage patterns

@@ -1,6 +1,7 @@
 include README.md
 include LICENSE
 include sdk/gati/py.typed
+recursive-include backend *.py *.ini *.txt *.sql *.sh *.md
 recursive-include mcp-server/dist *.js *.d.ts *.d.ts.map *.js.map
 include mcp-server/package.json
 global-exclude __pycache__

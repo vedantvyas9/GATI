@@ -151,6 +151,7 @@ sdk/gati/__init__.py
 sdk/gati/docker-compose.yml
 sdk/gati/exceptions.py
 sdk/gati/observe.py
+sdk/gati/py.typed
 sdk/gati/version.py
 sdk/gati.egg-info/PKG-INFO
 sdk/gati.egg-info/SOURCES.txt
@@ -165,6 +166,7 @@ sdk/gati/cli/main.py
 sdk/gati/cli/mcp_launcher.py
 sdk/gati/cli/process_manager.py
 sdk/gati/cli/services.py
+sdk/gati/cli/spa_server.py
 sdk/gati/core/__init__.py
 sdk/gati/core/buffer.py
 sdk/gati/core/client.py

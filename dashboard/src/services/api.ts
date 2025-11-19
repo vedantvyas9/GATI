@@ -34,14 +34,16 @@ class APIClient {
     // This works when dashboard and backend are on different ports
     // In dev mode with Vite, the proxy in vite.config.ts handles /api -> backend
     if (!defaultBaseURL) {
-      // Check if we're in development (has Vite dev server) or production (static files)
-      const isDev = (import.meta as any).env?.DEV
-      if (!isDev) {
+      // Check if we're in development (has Vite dev server with HMR)
+      // Vite dev mode has import.meta.hot available
+      const isViteDev = typeof (import.meta as any).hot !== 'undefined'
+      
+      if (isViteDev) {
+        // Development: use relative path (vite proxy will handle it)
+        defaultBaseURL = '/api'
+      } else {
         // Production: use full URL to backend (when served via http.server or nginx)
         defaultBaseURL = 'http://localhost:8000/api'
-      } else {
-        // Development: use relative path (vite proxy will handle it)
-      defaultBaseURL = '/api'
       }
     }
 

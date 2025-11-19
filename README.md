@@ -19,6 +19,14 @@ That's it! No authentication required. Start tracking immediately.
 
 ---
 
+## ⭐ Stay Updated
+
+**Star this repository** to get notified about new framework integrations and updates! 
+
+We're actively working on adding support for more AI frameworks in the coming weeks. If you'd like to request a specific framework, please fill out the [framework request form](#-support) in the Support section below.
+
+---
+
 ## Features
 
 - **Zero-Code Instrumentation** - Automatic tracking for LangChain and LangGraph
@@ -514,7 +522,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 💬 Support
 
-Fill out this 2 minute google form and we will get back in 48 hours: https://docs.google.com/forms/d/e/1FAIpQLSfGTXR1iyeSWfKGXOa7xhyjEW08gowEFwvgukI_v90qQ3Qpjg/viewform?usp=dialog
+**Need help or have questions?** Fill out this 2-minute Google form and we'll get back to you within 48 hours: https://docs.google.com/forms/d/e/1FAIpQLSfGTXR1iyeSWfKGXOa7xhyjEW08gowEFwvgukI_v90qQ3Qpjg/viewform?usp=dialog
+
+**Framework Requests:** We're adding support for more AI frameworks in the coming weeks! If you'd like to request a specific framework (e.g., AutoGen, CrewAI, Semantic Kernel, etc.), please mention it in the support form above.
 
 
 ---
