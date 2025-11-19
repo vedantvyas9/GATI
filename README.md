@@ -280,7 +280,7 @@ All development traces remain on your machine:
 # Disable telemetry in your code
 observe.init(name="my_agent", telemetry=False)
 ```
-
+However, total number of anonymous MCP queries will always be counted.
 **Why we collect metrics:**
 - Understand which frameworks are popular
 - Track SDK adoption and usage patterns

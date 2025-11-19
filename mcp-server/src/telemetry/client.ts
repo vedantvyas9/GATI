@@ -49,9 +49,9 @@ export class TelemetryClient {
     this.endpoint = endpoint;
     this.sdkVersion = sdkVersion;
 
-    // Set up paths
+    // Set up paths - use same metrics.json as Python SDK
     this.configDir = join(homedir(), '.gati');
-    this.metricsFile = join(this.configDir, 'mcp-metrics.json');
+    this.metricsFile = join(this.configDir, 'metrics.json');
     this.idFile = join(this.configDir, '.gati_id');
   }
 
@@ -100,13 +100,14 @@ export class TelemetryClient {
   }
 
   /**
-   * Load metrics from disk
+   * Load metrics from disk (shared with Python SDK)
    */
   private async loadMetrics(): Promise<void> {
     try {
       const data = await fs.readFile(this.metricsFile, 'utf-8');
-      const loaded = JSON.parse(data) as LocalMetrics;
+      const loaded = JSON.parse(data);
 
+      // Read mcp_queries from the shared metrics.json
       this.metrics.mcp_queries = loaded.mcp_queries || 0;
       this.metrics.last_reset_date =
         loaded.last_reset_date || new Date().toISOString().split('T')[0];
@@ -120,11 +121,27 @@ export class TelemetryClient {
   }
 
   /**
-   * Save metrics to disk
+   * Save metrics to disk (merge with existing metrics.json to preserve Python SDK data)
    */
   private async saveMetrics(): Promise<void> {
     try {
-      await fs.writeFile(this.metricsFile, JSON.stringify(this.metrics, null, 2));
+      // Read existing metrics.json to preserve other fields from Python SDK
+      let existingData: any = {};
+      try {
+        const existing = await fs.readFile(this.metricsFile, 'utf-8');
+        existingData = JSON.parse(existing);
+      } catch {
+        // File doesn't exist yet, that's okay - we'll create it
+      }
+
+      // Merge MCP queries into existing data (preserve all other fields)
+      const merged = {
+        ...existingData,
+        mcp_queries: this.metrics.mcp_queries,
+        last_reset_date: this.metrics.last_reset_date,
+      };
+
+      await fs.writeFile(this.metricsFile, JSON.stringify(merged, null, 2));
     } catch (error) {
       console.error('[GATI Telemetry] Failed to save metrics:', error);
     }
@@ -140,24 +157,44 @@ export class TelemetryClient {
 
     this.metrics.mcp_queries++;
 
-    // Save every 100 queries to reduce I/O
-    if (this.metrics.mcp_queries % 100 === 0) {
-      await this.saveMetrics();
-    }
+    // Save immediately so Python SDK can see the updated count
+    await this.saveMetrics();
   }
 
   /**
-   * Get current metrics
+   * Get current metrics (reads from shared metrics.json to include Python SDK data)
    */
   private async getMetrics(): Promise<TelemetryMetrics> {
+    // Read the shared metrics.json to get agent and event counts from Python SDK
+    let agentsTracked = 0;
+    let eventsToday = 0;
+    let lifetimeEvents = 0;
+    let frameworksDetected: string[] = ['mcp'];
+
+    try {
+      const data = await fs.readFile(this.metricsFile, 'utf-8');
+      const loaded = JSON.parse(data);
+      
+      agentsTracked = loaded.agents_tracked || loaded.legacy_agent_count || 0;
+      eventsToday = loaded.events_today || 0;
+      lifetimeEvents = loaded.lifetime_events || 0;
+      
+      // Merge frameworks (Python SDK might have detected others)
+      if (Array.isArray(loaded.frameworks_detected)) {
+        frameworksDetected = [...new Set([...frameworksDetected, ...loaded.frameworks_detected])];
+      }
+    } catch {
+      // If we can't read the file, use defaults
+    }
+
     return {
       installation_id: this.installationId,
       sdk_version: this.sdkVersion,
       mcp_queries: this.metrics.mcp_queries,
-      agents_tracked: 0, // MCP server doesn't track agents
-      events_today: 0, // MCP server doesn't track events
-      lifetime_events: 0, // MCP server doesn't track events
-      frameworks_detected: ['mcp'], // Always mark as MCP usage
+      agents_tracked: agentsTracked,
+      events_today: eventsToday,
+      lifetime_events: lifetimeEvents,
+      frameworks_detected: frameworksDetected,
       timestamp: new Date().toISOString(),
     };
   }

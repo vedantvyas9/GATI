@@ -148,7 +148,7 @@ class TelemetryClient:
                     "mcp_queries": self._metrics["mcp_queries"],
                     "frameworks_detected": list(self._metrics["frameworks_detected"]),
                     "last_reset_date": self._metrics["last_reset_date"],
-                    "tracked_agents": sorted(self._tracked_agents),
+                    # Only save agents_tracked count, not the list of agent names
                     "agents_tracked": max(len(self._tracked_agents), self._legacy_agent_count),
                 }
 
@@ -277,6 +277,9 @@ class TelemetryClient:
     # -------------------------------------------------------------------------
 
     def get_metrics(self) -> Dict[str, Any]:
+        # Reload metrics from disk to get latest MCP query count (updated by MCP server)
+        self._load_metrics()
+        
         auto_detected = self._auto_detect_frameworks()
         with self._lock:
             self._reset_daily_counters_if_needed_locked()

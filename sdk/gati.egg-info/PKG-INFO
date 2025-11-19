@@ -50,7 +50,7 @@ Requires-Dist: psycopg2-binary>=2.9.9; extra == "backend"
 Requires-Dist: sqlalchemy>=2.0.25; extra == "backend"
 Requires-Dist: python-dotenv>=1.0.0; extra == "backend"
 
-# GATI SDK
+# GATI SDK (Public Beta)
 
 **Local-First Intelligent Observability Platform for AI Agents**
 
@@ -214,6 +214,23 @@ Open your browser to [http://localhost:3000](http://localhost:3000) to see:
 
 **All data is stored locally in SQLite** - nothing leaves your machine except anonymous usage metrics.
 
+### Metrics Dashboard
+
+Track aggregate metrics across all your agents during development. Navigate to the **Metrics** page in the dashboard to view:
+
+![GATI metrics dashboard showing aggregate agent metrics](./metrics_dashboard.png)
+
+The metrics dashboard provides:
+
+- **Summary Cards**: Total agents, runs, events, costs, and averages
+- **Cost Timeline**: Daily cost trends with cumulative totals over time
+- **Token Usage Timeline**: Input/output token consumption patterns
+- **Agent Comparison**: Side-by-side comparison of runs, costs, and token usage per agent
+- **Top Agents**: Rankings by cost and number of runs
+- **Date Range Filtering**: View metrics for the last 7, 14, 30, 60, or 90 days
+
+Access the metrics dashboard at [http://localhost:3000/metrics](http://localhost:3000/metrics) or click the "Metrics" link in the navigation bar.
+
 ---
 
 ## MCP Server Integration for VS Code
@@ -248,12 +265,13 @@ The Model Context Protocol (MCP) allows AI assistants like GitHub Copilot to acc
 
 4. **Start querying your traces!**
 
-   Open GitHub Copilot Chat and try:
-   - `@gati show me all agent runs`
-   - `@gati what was the average cost today?`
-   - `@gati find runs with errors`
-   - `@gati compare the last 3 runs`
-   - `@gati which agent used the most tokens?`
+   Open GitHub Copilot Agent Chat and try:
+   - `show me all agent runs in gati`
+   - `what was the average cost today?`
+   - `find runs with errors`
+   - `compare the last 3 runs`
+   - `which agent used the most tokens?`
+   Try the above commands preferably using a claude model
 
 ### MCP Server Features
 
@@ -548,7 +566,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 💬 Support
 
-Fill out this 2 minute google form: https://docs.google.com/forms/d/e/1FAIpQLSfGTXR1iyeSWfKGXOa7xhyjEW08gowEFwvgukI_v90qQ3Qpjg/viewform?usp=dialog
+Fill out this 2 minute google form and we will get back in 48 hours: https://docs.google.com/forms/d/e/1FAIpQLSfGTXR1iyeSWfKGXOa7xhyjEW08gowEFwvgukI_v90qQ3Qpjg/viewform?usp=dialog
 
 
 ---
