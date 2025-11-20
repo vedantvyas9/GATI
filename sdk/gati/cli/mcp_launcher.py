@@ -30,7 +30,7 @@ def find_mcp_server():
 
     # Strategy 2: Pip install - look in site-packages
     # When installed via pip, MANIFEST.in includes mcp-server/
-    # Structure: site-packages/gati-0.1.3/mcp-server/dist/index.js
+    # Structure: site-packages/gati-0.0.3/mcp-server/dist/index.js
     try:
         import gati
         import importlib.util
